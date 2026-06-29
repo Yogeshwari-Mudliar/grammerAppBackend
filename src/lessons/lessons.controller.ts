@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,6 +19,8 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { LessonsService } from './lessons.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
+import { QueryLessonsDto } from './dto/query-lessons.dto';
+import { ReorderLessonsDto } from './dto/reorder-lessons.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('lessons')
@@ -25,8 +28,15 @@ export class LessonsController {
   constructor(private readonly lessonsService: LessonsService) {}
 
   @Get()
-  findAll(@CurrentUser() user: AuthUser) {
-    return this.lessonsService.findAllForUser(user);
+  findAll(@CurrentUser() user: AuthUser, @Query() query: QueryLessonsDto) {
+    return this.lessonsService.findAllForUser(user, query);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Patch('reorder')
+  reorder(@Body() dto: ReorderLessonsDto) {
+    return this.lessonsService.reorder(dto);
   }
 
   @Get(':id')
