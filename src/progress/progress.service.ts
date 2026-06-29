@@ -62,6 +62,7 @@ export class ProgressService {
   findMine(user: AuthUser): Promise<LessonProgress[]> {
     return this.progressRepo.find({
       where: { userId: user.id },
+      relations: ['lesson'],
       order: { updatedAt: 'DESC' },
     });
   }

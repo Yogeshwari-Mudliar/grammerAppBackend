@@ -4,9 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { FindOptionsWhere, ILike, In, Repository } from 'typeorm';
 import { UserRole } from '../common/enums/user-role.enum';
 import { Visibility } from '../common/enums/visibility.enum';
+import { PaginatedResult } from '../common/interfaces/paginated-result.interface';
 import { AuthUser } from '../auth/strategies/jwt.strategy';
 import { Lesson } from './entities/lesson.entity';
 import { LessonSection } from './entities/lesson-section.entity';
@@ -14,6 +15,8 @@ import { LessonExample } from './entities/lesson-example.entity';
 import { LessonActivity } from './entities/lesson-activity.entity';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
+import { QueryLessonsDto } from './dto/query-lessons.dto';
+import { ReorderLessonsDto } from './dto/reorder-lessons.dto';
 
 const RELATIONS = ['sections', 'examples', 'activities'];
 
@@ -80,19 +83,55 @@ export class LessonsService {
     });
   }
 
-  async findAllForUser(user: AuthUser): Promise<Lesson[]> {
-    if (user.role === UserRole.ADMIN) {
-      return this.lessonRepo.find({
-        order: { order: 'ASC', createdAt: 'ASC' },
-      });
+  async findAllForUser(
+    user: AuthUser,
+    query: QueryLessonsDto = {},
+  ): Promise<PaginatedResult<Lesson>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+
+    // Base visibility/publish constraints applied to every search variant.
+    const base: FindOptionsWhere<Lesson> = {};
+    if (user.role !== UserRole.ADMIN) {
+      base.isPublished = true;
+      base.visibility = In(this.visibilitiesForRole(user.role));
+    } else if (query.visibility) {
+      base.visibility = query.visibility;
     }
-    return this.lessonRepo.find({
-      where: {
-        isPublished: true,
-        visibility: In(this.visibilitiesForRole(user.role)),
-      },
+
+    let where: FindOptionsWhere<Lesson> | FindOptionsWhere<Lesson>[] = base;
+    if (query.search) {
+      const term = `%${query.search}%`;
+      // OR across title/description, each keeping the base AND constraints.
+      where = [
+        { ...base, title: ILike(term) },
+        { ...base, description: ILike(term) },
+      ];
+    }
+
+    const [data, total] = await this.lessonRepo.findAndCount({
+      where,
       order: { order: 'ASC', createdAt: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 0,
+    };
+  }
+
+  async reorder(dto: ReorderLessonsDto): Promise<Lesson[]> {
+    await Promise.all(
+      dto.items.map((item) =>
+        this.lessonRepo.update({ id: item.id }, { order: item.order }),
+      ),
+    );
+    return this.lessonRepo.find({ order: { order: 'ASC', createdAt: 'ASC' } });
   }
 
   async findOneForUser(id: string, user: AuthUser): Promise<Lesson> {
