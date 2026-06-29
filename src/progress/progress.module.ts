@@ -14,5 +14,6 @@ import { ProgressController } from './progress.controller';
   ],
   controllers: [ProgressController],
   providers: [ProgressService],
+  exports: [ProgressService],
 })
 export class ProgressModule {}

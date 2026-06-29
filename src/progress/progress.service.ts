@@ -59,6 +59,41 @@ export class ProgressService {
     return this.progressRepo.save(progress);
   }
 
+  // Called when a quiz tied to a lesson is completed; advances lesson progress.
+  async recordQuizCompletion(
+    userId: number,
+    lessonId: string,
+    percentage: number,
+    passed: boolean,
+  ): Promise<LessonProgress> {
+    let progress = await this.progressRepo.findOne({
+      where: { userId, lessonId },
+    });
+    if (!progress) {
+      progress = this.progressRepo.create({
+        userId,
+        lessonId,
+        status: ProgressStatus.NOT_STARTED,
+        progressPercent: 0,
+      });
+    }
+
+    progress.progressPercent = Math.max(
+      progress.progressPercent,
+      Math.round(percentage),
+    );
+
+    if (passed) {
+      progress.status = ProgressStatus.COMPLETED;
+      progress.progressPercent = 100;
+      progress.completedAt = progress.completedAt ?? new Date();
+    } else if (progress.status !== ProgressStatus.COMPLETED) {
+      progress.status = ProgressStatus.IN_PROGRESS;
+    }
+
+    return this.progressRepo.save(progress);
+  }
+
   findMine(user: AuthUser): Promise<LessonProgress[]> {
     return this.progressRepo.find({
       where: { userId: user.id },
