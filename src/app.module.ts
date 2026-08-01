@@ -5,6 +5,10 @@ import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { LessonsModule } from './lessons/lessons.module';
+import { ProgressModule } from './progress/progress.module';
+import { QuizModule } from './quiz/quiz.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -25,6 +29,10 @@ import { AuthModule } from './auth/auth.module';
     }),
     UsersModule,
     AuthModule,
+    LessonsModule,
+    ProgressModule,
+    QuizModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
