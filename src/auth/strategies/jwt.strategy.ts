@@ -5,7 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserRole } from 'src/common/enums/user-role.enum';
 
 export interface AuthUser {
-  sub: number;
+  id: number;
   email: string;
   role: UserRole;
 }
@@ -15,9 +15,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(config: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-
       ignoreExpiration: false,
-
       secretOrKey: config.get<string>(
         'JWT_SECRET',
         'super_secret_key',
@@ -25,7 +23,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: AuthUser): Promise<AuthUser> {
-    return payload;
+  async validate(payload: any): Promise<AuthUser> {
+    return {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+    };
   }
 }
