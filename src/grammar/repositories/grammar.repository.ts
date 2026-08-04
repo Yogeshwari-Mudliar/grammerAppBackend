@@ -153,15 +153,19 @@ async addLesson(
 
   for (const section of sections) {
     const newSection = this.sectionRepo.create({
-      heading: section.heading,
-      content: section.content,
-      type: 'TEXT',
-      imageUrl: '',
-      orderNo: order++,
-      lesson,
-      lessonId: lesson.id,
-      isActive: true,
-    });
+  heading: section.heading,
+  content: section.content,
+
+  isQuiz: section.isQuiz,
+  sectionType: section.sectionType,
+
+  type: 'TEXT',
+  imageUrl: '',
+  orderNo: order++,
+  lesson,
+  lessonId: lesson.id,
+  isActive: true,
+});
 
     await this.sectionRepo.save(newSection);
   }

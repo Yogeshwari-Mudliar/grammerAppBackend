@@ -55,4 +55,14 @@ export class GrammarSection {
   default: true,
 })
 isActive: boolean;
+
+@Column({
+  default: false,
+})
+isQuiz: boolean;
+
+@Column({
+  default: 'CONTENT',
+})
+sectionType: string;
 }
