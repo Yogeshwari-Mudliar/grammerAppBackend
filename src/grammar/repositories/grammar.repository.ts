@@ -149,27 +149,33 @@ async addLesson(
 
   const sections = buildSections(text);
 
-  let order = 1;
+  // let order = 1;
+for (const section of sections) {
+  const newSection = this.sectionRepo.create({
+    heading: section.heading,
+    content: section.content,
 
-  for (const section of sections) {
-    const newSection = this.sectionRepo.create({
-  heading: section.heading,
-  content: section.content,
+    isQuiz: section.isQuiz,
+    sectionType: section.sectionType,
 
-  isQuiz: section.isQuiz,
-  sectionType: section.sectionType,
+    type: 'TEXT',
 
-  type: 'TEXT',
-  imageUrl: '',
-  orderNo: order++,
-  lesson,
-  lessonId: lesson.id,
-  isActive: true,
-});
+    imageUrl: '',
 
-    await this.sectionRepo.save(newSection);
-  }
+    orderNo: section.orderNo,
 
+    xpReward: section.isQuiz ? 25 : 10,
+
+    coinReward: section.isQuiz ? 15 : 5,
+
+    lesson,
+    lessonId: lesson.id,
+
+    isActive: true,
+  });
+
+  await this.sectionRepo.save(newSection);
+}
   return this.getLesson(lesson.id);
 }
   async updateLesson(

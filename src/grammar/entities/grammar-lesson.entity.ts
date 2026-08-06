@@ -5,6 +5,8 @@ import {
   ManyToOne,
   OneToMany,
   JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 
 import { GrammarCourse } from './grammar-course.entity';
@@ -62,4 +64,10 @@ export class GrammarLesson {
     section => section.lesson,
   )
   sections: GrammarSection[];
+
+  @CreateDateColumn()
+createdAt: Date;
+
+@UpdateDateColumn()
+updatedAt: Date;
 }

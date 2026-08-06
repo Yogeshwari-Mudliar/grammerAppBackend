@@ -36,7 +36,28 @@ export class GrammarSection {
     default: 1,
   })
   orderNo: number;
+@Column({
+  default: false,
+})
 
+@Column({
+  default: 'CONTENT',
+})
+sectionType: string;
+
+@Column({
+  default: 10,
+})
+xpReward: number;
+
+@Column({
+  default: 5,
+})
+
+@Column({
+  default: 5,
+})
+coinReward: number;
   @ManyToOne(
     () => GrammarLesson,
     lesson => lesson.sections,
@@ -61,8 +82,5 @@ isActive: boolean;
 })
 isQuiz: boolean;
 
-@Column({
-  default: 'CONTENT',
-})
-sectionType: string;
+
 }
