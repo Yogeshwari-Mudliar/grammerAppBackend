@@ -67,6 +67,12 @@ export class User {
   })
   lastLoginAt: Date;
 
+  @Column({
+  type: 'text',
+  nullable: true,
+})
+hashedRefreshToken: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -1,28 +1,78 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+
 import { CurrentUser } from './decorators/current-user.decorator';
+
 import type { AuthUser } from './strategies/jwt.strategy';
+import { RefreshDto } from './dto/refresh.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+  ) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
+  register(
+    @Body() dto: RegisterDto,
+  ) {
     return this.authService.register(dto);
   }
 
   @Post('login')
-  login(@Body() dto: LoginDto) {
+  login(
+    @Body() dto: LoginDto,
+  ) {
     return this.authService.login(dto);
   }
 
+  // ============================
+  // REFRESH TOKEN
+  // ============================
+
+  @Post('refresh')
+  refresh(
+    @Body() dto: RefreshDto,
+  ) {
+    return this.authService.refresh(
+      dto.refreshToken,
+    );
+  }
+
+  // ============================
+  // LOGOUT
+  // ============================
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  logout(
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.authService.logout(
+      user.id,
+    );
+  }
+
+  // ============================
+  // CURRENT USER
+  // ============================
+
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@CurrentUser() user: AuthUser) {
+  me(
+    @CurrentUser() user: AuthUser,
+  ) {
     return user;
   }
 }

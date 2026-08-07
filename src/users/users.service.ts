@@ -106,6 +106,15 @@ export class UsersService {
     });
 
   }
+
+  async updateRefreshToken(
+  id: number,
+  hashedRefreshToken: string | null,
+) {
+  await this.userRepository.update(id, {
+    hashedRefreshToken,
+  });
+}
 async findByIdentifier(identifier: string) {
 
   return this.userRepository.findOne({
