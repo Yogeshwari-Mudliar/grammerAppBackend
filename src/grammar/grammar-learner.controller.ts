@@ -19,6 +19,21 @@ export class GrammarLearnerController {
     private readonly service: GrammarLearnerService,
   ) {}
 
+  // ============================================================
+  // LIBRARY
+  // ============================================================
+
+  @Get('library')
+  getLibrary(
+    @CurrentUser() user: any,
+  ) {
+    return this.service.getLibrary(user.id);
+  }
+
+  // ============================================================
+  // COURSE
+  // ============================================================
+
   @Get('course/:courseId')
   getCourse(
     @CurrentUser() user: any,
@@ -29,6 +44,10 @@ export class GrammarLearnerController {
       courseId,
     );
   }
+
+  // ============================================================
+  // LESSON
+  // ============================================================
 
   @Get('lesson/:lessonId')
   getLesson(
@@ -41,7 +60,13 @@ export class GrammarLearnerController {
     );
   }
 
-  @Post('lesson/:lessonId/section/:sectionId/complete')
+  // ============================================================
+  // COMPLETE SECTION
+  // ============================================================
+
+  @Post(
+    'lesson/:lessonId/section/:sectionId/complete',
+  )
   completeSection(
     @CurrentUser() user: any,
     @Param('lessonId') lessonId: string,
@@ -54,7 +79,30 @@ export class GrammarLearnerController {
     );
   }
 
-  @Post('lesson/:lessonId/quiz/:sectionId/submit')
+  // ============================================================
+  // COMPLETE ENTIRE LESSON
+  // ============================================================
+
+  @Post(
+    'lesson/:lessonId/complete',
+  )
+  completeLesson(
+    @CurrentUser() user: any,
+    @Param('lessonId') lessonId: string,
+  ) {
+    return this.service.completeLesson(
+      user.id,
+      lessonId,
+    );
+  }
+
+  // ============================================================
+  // QUIZ
+  // ============================================================
+
+  @Post(
+    'lesson/:lessonId/quiz/:sectionId/submit',
+  )
   submitQuiz(
     @CurrentUser() user: any,
     @Param('lessonId') lessonId: string,
@@ -68,12 +116,17 @@ export class GrammarLearnerController {
       score,
     );
   }
-@Get('dashboard')
-getDashboard(
-  @CurrentUser() user: any,
-) {
-  return this.service.getDashboard(
-    user.id,
-  );
-}
+
+  // ============================================================
+  // DASHBOARD
+  // ============================================================
+
+  @Get('dashboard')
+  getDashboard(
+    @CurrentUser() user: any,
+  ) {
+    return this.service.getDashboard(
+      user.id,
+    );
+  }
 }

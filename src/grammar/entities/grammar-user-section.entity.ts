@@ -85,10 +85,15 @@ userId: number;
     nullable: true,
   })
   completedAt: Date;
-
+@Column({
+  default: false,
+})
+isLastViewed: boolean;
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+
 }

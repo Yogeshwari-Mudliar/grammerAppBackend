@@ -7,7 +7,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 
 import {
   Repository,
-  IsNull,
 } from 'typeorm';
 
 import { GrammarCourse } from '../entities/grammar-course.entity';
@@ -21,10 +20,12 @@ import { CreateSectionDto } from '../dto/create-section.dto';
 import { UpdateCourseDto } from '../dto/update-course.dto';
 import { UpdateLessonDto } from '../dto/update-lesson.dto';
 import { UpdateSectionDto } from '../dto/update-section.dto';
+
 import { buildSections } from '../utils/section-parser';
 
 @Injectable()
 export class GrammarRepository {
+
   constructor(
     @InjectRepository(GrammarCourse)
     private readonly courseRepo: Repository<GrammarCourse>,
@@ -41,14 +42,17 @@ export class GrammarRepository {
   // =====================================================
 
   async getCourses() {
-    return this.courseRepo.find({
+
+    const courses = await this.courseRepo.find({
       where: {
         isActive: true,
       },
+
       relations: [
         'lessons',
         'lessons.sections',
       ],
+
       order: {
         sortOrder: 'ASC',
         lessons: {
@@ -59,18 +63,48 @@ export class GrammarRepository {
         },
       },
     });
+
+    courses.forEach(course => {
+
+      course.lessons = (course.lessons || [])
+        .filter(lesson => lesson.isActive);
+
+      course.lessons.forEach(lesson => {
+
+        lesson.sections = (lesson.sections || [])
+          .filter(section => section.isActive)
+          .sort(
+            (a, b) =>
+              (a.orderNo ?? 0) -
+              (b.orderNo ?? 0),
+          );
+
+      });
+
+      course.lessons.sort(
+        (a, b) =>
+          (a.sortOrder ?? 0) -
+          (b.sortOrder ?? 0),
+      );
+
+    });
+
+    return courses;
   }
 
   async getCourse(id: string) {
+
     const course = await this.courseRepo.findOne({
       where: {
         id,
         isActive: true,
       },
+
       relations: [
         'lessons',
         'lessons.sections',
       ],
+
       order: {
         lessons: {
           sortOrder: 'ASC',
@@ -85,10 +119,35 @@ export class GrammarRepository {
       throw new NotFoundException('Course not found');
     }
 
+    // Remove inactive lessons
+    course.lessons = (course.lessons || [])
+      .filter(lesson => lesson.isActive);
+
+    // Remove inactive sections
+    course.lessons.forEach(lesson => {
+
+      lesson.sections = (lesson.sections || [])
+        .filter(section => section.isActive)
+        .sort(
+          (a, b) =>
+            (a.orderNo ?? 0) -
+            (b.orderNo ?? 0),
+        );
+
+    });
+
+    // Make lesson order explicit
+    course.lessons.sort(
+      (a, b) =>
+        (a.sortOrder ?? 0) -
+        (b.sortOrder ?? 0),
+    );
+
     return course;
   }
 
   async createCourse(dto: CreateCourseDto) {
+
     const course = this.courseRepo.create({
       ...dto,
       isActive: true,
@@ -103,19 +162,27 @@ export class GrammarRepository {
     id: string,
     dto: UpdateCourseDto,
   ) {
+
     await this.getCourse(id);
 
-    await this.courseRepo.update(id, dto);
+    await this.courseRepo.update(
+      id,
+      dto,
+    );
 
     return this.getCourse(id);
   }
 
   async deleteCourse(id: string) {
+
     await this.getCourse(id);
 
-    await this.courseRepo.update(id, {
-      isActive: false,
-    });
+    await this.courseRepo.update(
+      id,
+      {
+        isActive: false,
+      },
+    );
 
     return {
       message: 'Course deleted',
@@ -126,99 +193,198 @@ export class GrammarRepository {
   // LESSON
   // =====================================================
 
-async addLesson(
-  courseId: string,
-  dto: CreateLessonDto,
-  text: string,
-) {
-  const course = await this.getCourse(courseId);
+  async addLesson(
+    courseId: string,
+    dto: CreateLessonDto,
+    text: string,
+  ) {
 
-  const lesson = this.lessonRepo.create({
-    title: dto.title,
-    shortDescription: dto.shortDescription,
-    duration: dto.duration ?? 0,
-    thumbnail: dto.thumbnail ?? '',
-    isPublished: dto.isPublished ?? true,
-    isActive: true,
-    sortOrder: dto.sortOrder ?? 1,
-    course,
-    courseId,
-  });
+    const course =
+      await this.getCourse(courseId);
 
-  await this.lessonRepo.save(lesson);
+    const lesson =
+      this.lessonRepo.create({
 
-  const sections = buildSections(text);
+        title: dto.title,
 
-  // let order = 1;
-for (const section of sections) {
-  const newSection = this.sectionRepo.create({
-    heading: section.heading,
-    content: section.content,
+        shortDescription:
+          dto.shortDescription,
 
-    isQuiz: section.isQuiz,
-    sectionType: section.sectionType,
+        duration:
+          dto.duration ?? 0,
 
-    type: 'TEXT',
+        thumbnail:
+          dto.thumbnail ?? '',
 
-    imageUrl: '',
+        isPublished:
+          dto.isPublished ?? true,
 
-    orderNo: section.orderNo,
+        isActive: true,
 
-    xpReward: section.isQuiz ? 25 : 10,
+        sortOrder:
+          dto.sortOrder ?? 1,
 
-    coinReward: section.isQuiz ? 15 : 5,
+        course,
 
-    lesson,
-    lessonId: lesson.id,
+        courseId,
+      });
 
-    isActive: true,
-  });
+    await this.lessonRepo.save(
+      lesson,
+    );
 
-  await this.sectionRepo.save(newSection);
-}
-  return this.getLesson(lesson.id);
-}
-  async updateLesson(
-  id: string,
-  dto: UpdateLessonDto,
-  text?: string,
-) {
-    const lesson = await this.lessonRepo.findOne({
-      where: {
-        id,
-      },
-    });
+    // Parse uploaded document
+    const sections =
+      buildSections(text);
 
-    if (!lesson) {
-      throw new NotFoundException('Lesson not found');
+    // Create sections
+    for (const section of sections) {
+
+      const newSection =
+        this.sectionRepo.create({
+
+          heading:
+            section.heading,
+
+          content:
+            section.content,
+
+          isQuiz:
+            section.isQuiz,
+
+          sectionType:
+            section.sectionType,
+
+          type: 'TEXT',
+
+          imageUrl: '',
+
+          orderNo:
+            section.orderNo,
+
+          xpReward:
+            section.isQuiz
+              ? 25
+              : 10,
+
+          coinReward:
+            section.isQuiz
+              ? 15
+              : 5,
+
+          lesson,
+
+          lessonId:
+            lesson.id,
+
+          isActive: true,
+        });
+
+      await this.sectionRepo.save(
+        newSection,
+      );
     }
 
-    await this.lessonRepo.update(id, dto);
+    return this.getLesson(
+      lesson.id,
+    );
+  }
 
-    return this.lessonRepo.findOne({
-      where: { id },
-      relations: ['sections'],
-    });
+  async updateLesson(
+    id: string,
+    dto: UpdateLessonDto,
+    text?: string,
+  ) {
+
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!lesson) {
+      throw new NotFoundException(
+        'Lesson not found',
+      );
+    }
+
+    await this.lessonRepo.update(
+      id,
+      dto,
+    );
+
+    return this.getLesson(id);
   }
 
   async deleteLesson(id: string) {
-    const lesson = await this.lessonRepo.findOne({
-      where: {
-        id,
-      },
-    });
+
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id,
+        },
+      });
 
     if (!lesson) {
-      throw new NotFoundException('Lesson not found');
+      throw new NotFoundException(
+        'Lesson not found',
+      );
     }
 
-    await this.lessonRepo.update(id, {
-      isActive: false,
-    });
+    await this.lessonRepo.update(
+      id,
+      {
+        isActive: false,
+      },
+    );
 
     return {
       message: 'Lesson deleted',
     };
+  }
+
+  async getLesson(id: string) {
+
+    const lesson =
+      await this.lessonRepo.findOne({
+
+        where: {
+          id,
+          isActive: true,
+        },
+
+        relations: [
+          'sections',
+        ],
+
+        order: {
+          sections: {
+            orderNo: 'ASC',
+          },
+        },
+      });
+
+    if (!lesson) {
+      throw new NotFoundException(
+        'Lesson not found',
+      );
+    }
+
+    // Remove inactive sections
+    lesson.sections =
+      (lesson.sections || [])
+        .filter(
+          section =>
+            section.isActive,
+        )
+        .sort(
+          (a, b) =>
+            (a.orderNo ?? 0) -
+            (b.orderNo ?? 0),
+        );
+
+    return lesson;
   }
 
   // =====================================================
@@ -230,94 +396,117 @@ for (const section of sections) {
     lessonId: string,
     dto: CreateSectionDto,
   ) {
-    await this.getCourse(courseId);
 
-    const lesson = await this.lessonRepo.findOne({
-      where: {
-        id: lessonId,
-      },
-    });
+    await this.getCourse(
+      courseId,
+    );
+
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id: lessonId,
+          isActive: true,
+        },
+      });
 
     if (!lesson) {
-      throw new NotFoundException('Lesson not found');
+      throw new NotFoundException(
+        'Lesson not found',
+      );
     }
 
-    const section = this.sectionRepo.create({
-      ...dto,
-      lesson,
-      lessonId,
-      orderNo: dto.orderNo ?? 1,
-    });
+    const section =
+      this.sectionRepo.create({
 
-    return this.sectionRepo.save(section);
+        ...dto,
+
+        lesson,
+
+        lessonId,
+
+        orderNo:
+          dto.orderNo ?? 1,
+
+        isActive: true,
+      });
+
+    return this.sectionRepo.save(
+      section,
+    );
   }
 
   async updateSection(
     id: string,
     dto: UpdateSectionDto,
   ) {
-    const section = await this.sectionRepo.findOne({
+
+    const section =
+      await this.sectionRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!section) {
+      throw new NotFoundException(
+        'Section not found',
+      );
+    }
+
+    await this.sectionRepo.update(
+      id,
+      dto,
+    );
+
+    return this.sectionRepo.findOne({
       where: {
         id,
       },
-    });
-
-    if (!section) {
-      throw new NotFoundException('Section not found');
-    }
-
-    await this.sectionRepo.update(id, dto);
-
-    return this.sectionRepo.findOne({
-      where: { id },
     });
   }
 
   async deleteSection(id: string) {
-    const section = await this.sectionRepo.findOne({
-      where: {
-        id,
-      },
-    });
+
+    const section =
+      await this.sectionRepo.findOne({
+        where: {
+          id,
+        },
+      });
 
     if (!section) {
-      throw new NotFoundException('Section not found');
+      throw new NotFoundException(
+        'Section not found',
+      );
     }
 
-    await this.sectionRepo.delete(id);
+    await this.sectionRepo.update(
+      id,
+      {
+        isActive: false,
+      },
+    );
 
     return {
       message: 'Section deleted',
     };
   }
-async getLesson(id: string) {
-  const lesson = await this.lessonRepo.findOne({
-    where: {
-      id,
-      isActive: true,
-    },
-    relations: ['sections'],
-  });
 
-  if (!lesson) {
-    throw new NotFoundException('Lesson not found');
+  async getSection(id: string) {
+
+    const section =
+      await this.sectionRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!section) {
+      throw new NotFoundException(
+        'Section not found',
+      );
+    }
+
+    return section;
   }
-
-  return lesson;
-}
-
-async getSection(id: string) {
-  const section = await this.sectionRepo.findOne({
-    where: {
-      id,
-    },
-  });
-
-  if (!section) {
-    throw new NotFoundException('Section not found');
-  }
-
-  return section;
-}
-
 }

@@ -34,13 +34,20 @@ export class DocumentParserService {
     }
   }
 
-  private async parseDocx(file: any): Promise<string> {
-    const result = await mammoth.extractRawText({
+private async parseDocx(file: any): Promise<string> {
+
+  const result =
+    await mammoth.extractRawText({
       buffer: file.buffer,
     });
- 
-    return result.value;
-  }
+
+  return result.value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 private async parsePdf(file: any): Promise<string> {
   const parser = new PDFParse({
@@ -75,28 +82,137 @@ private async parsePdf(file: any): Promise<string> {
 }
 
 private async parsePptx(file: any): Promise<string> {
+
   const PPTX2Json = require('pptx2json');
 
   const parser = new PPTX2Json();
 
-  const json = await parser.buffer2json(file.buffer);
-
-  let text = '';
+  const json =
+    await parser.buffer2json(file.buffer);
 
   const slideFiles = Object.keys(json)
-    .filter(key => key.startsWith('ppt/slides/slide'))
-    .sort();
+    .filter(key =>
+      /^ppt\/slides\/slide\d+\.xml$/i.test(key)
+    )
+    .sort((a, b) => {
+
+      const aNum =
+        Number(
+          a.match(/slide(\d+)/i)?.[1] || 0
+        );
+
+      const bNum =
+        Number(
+          b.match(/slide(\d+)/i)?.[1] || 0
+        );
+
+      return aNum - bNum;
+    });
+
+
+  const slides: string[] = [];
+
 
   for (const slidePath of slideFiles) {
-    const slide = json[slidePath];
 
-    const slideText = this.extractText(slide);
+    const slide =
+      json[slidePath];
 
-    text += this.extractText(slide);
-    text += '\n';
+    const slideText =
+      this.extractPptText(slide);
+
+    if (slideText.trim()) {
+
+      slides.push(
+        `SECTION: Slide ${slides.length + 1}\n${slideText}`
+      );
+
+    }
+
   }
 
-  return text.trim();
+
+  return slides.join('\n\n').trim();
+}
+private extractPptText(obj: any): string {
+
+  const texts: string[] = [];
+
+  const walk = (node: any): void => {
+
+    if (!node) {
+      return;
+    }
+
+
+    if (Array.isArray(node)) {
+
+      node.forEach(item =>
+        walk(item)
+      );
+
+      return;
+    }
+
+
+    if (typeof node !== 'object') {
+      return;
+    }
+
+
+    if (node['a:t']) {
+
+      const value = node['a:t'];
+
+      if (Array.isArray(value)) {
+
+        value.forEach(item => {
+
+          if (
+            typeof item === 'string' &&
+            item.trim()
+          ) {
+
+            texts.push(
+              item.trim()
+            );
+
+          }
+
+        });
+
+      } else if (
+        typeof value === 'string' &&
+        value.trim()
+      ) {
+
+        texts.push(
+          value.trim()
+        );
+
+      }
+
+    }
+
+
+    Object.keys(node)
+      .forEach(key => {
+
+        if (key !== 'a:t') {
+          walk(node[key]);
+        }
+
+      });
+
+  };
+
+
+  walk(obj);
+
+
+  return [
+    ...new Set(texts)
+  ].join('\n');
 }
 private extractText(obj: any): string {
   let result = '';

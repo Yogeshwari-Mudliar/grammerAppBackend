@@ -1,13 +1,15 @@
 import {
   IsString,
   IsOptional,
-  IsNumber
+  IsNumber,
+  IsBoolean,
 } from 'class-validator';
 
 export class CreateSectionDto {
 
+  @IsOptional()
   @IsString()
-  lessonId: string;
+  lessonId?: string;
 
   @IsString()
   heading: string;
@@ -27,4 +29,19 @@ export class CreateSectionDto {
   @IsNumber()
   orderNo?: number;
 
+  @IsOptional()
+  @IsString()
+  sectionType?: string;
+
+  @IsOptional()
+  @IsNumber()
+  xpReward?: number;
+
+  @IsOptional()
+  @IsNumber()
+  coinReward?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isQuiz?: boolean;
 }

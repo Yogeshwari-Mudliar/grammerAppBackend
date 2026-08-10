@@ -14,13 +14,14 @@ import { DocumentParserService } from './services/document-parser.service';
 
 @Injectable()
 export class GrammarService {
+
   constructor(
     private readonly grammarRepository: GrammarRepository,
     private readonly parser: DocumentParserService,
   ) {}
 
   // =====================================================
-  // Learner
+  // Learner / Public Course
   // =====================================================
 
   async getCourses() {
@@ -43,7 +44,10 @@ export class GrammarService {
     id: string,
     dto: UpdateCourseDto,
   ) {
-    return this.grammarRepository.updateCourse(id, dto);
+    return this.grammarRepository.updateCourse(
+      id,
+      dto,
+    );
   }
 
   async deleteCourse(id: string) {
@@ -59,7 +63,8 @@ export class GrammarService {
     dto: CreateLessonDto,
     file: any,
   ) {
-    const text = await this.parser.parse(file);
+    const text =
+      await this.parser.parse(file);
 
     return this.grammarRepository.addLesson(
       courseId,
@@ -73,19 +78,31 @@ export class GrammarService {
     dto: UpdateLessonDto,
     file?: any,
   ) {
+
+    let text: string | undefined;
+
+    if (file) {
+      text =
+        await this.parser.parse(file);
+    }
+
     return this.grammarRepository.updateLesson(
       id,
       dto,
-      file,
+      text,
     );
   }
 
   async deleteLesson(id: string) {
-    return this.grammarRepository.deleteLesson(id);
+    return this.grammarRepository.deleteLesson(
+      id,
+    );
   }
 
   async getLesson(id: string) {
-    return this.grammarRepository.getLesson(id);
+    return this.grammarRepository.getLesson(
+      id,
+    );
   }
 
   // =====================================================
@@ -108,14 +125,22 @@ export class GrammarService {
     id: string,
     dto: UpdateSectionDto,
   ) {
-    return this.grammarRepository.updateSection(id, dto);
+    return this.grammarRepository.updateSection(
+      id,
+      dto,
+    );
   }
 
   async deleteSection(id: string) {
-    return this.grammarRepository.deleteSection(id);
+    return this.grammarRepository.deleteSection(
+      id,
+    );
   }
 
   async getSection(id: string) {
-    return this.grammarRepository.getSection(id);
+    return this.grammarRepository.getSection(
+      id,
+    );
   }
+
 }

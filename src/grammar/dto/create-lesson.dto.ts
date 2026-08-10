@@ -1,4 +1,5 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
+
 import {
   IsString,
   IsOptional,
@@ -6,33 +7,47 @@ import {
   IsBoolean
 } from 'class-validator';
 
-export class CreateLessonDto {
 
-  // @IsString()
-  // courseId: string;
+export class CreateLessonDto {
 
   @IsString()
   title: string;
 
+
   @IsString()
   shortDescription: string;
+
 
   @IsOptional()
   @IsString()
   thumbnail?: string;
+
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   duration?: number;
 
+
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   sortOrder?: number;
 
+
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true) {
+      return true;
+    }
+
+    if (value === 'false' || value === false) {
+      return false;
+    }
+
+    return value;
+  })
   @IsBoolean()
   isPublished?: boolean;
+
 }

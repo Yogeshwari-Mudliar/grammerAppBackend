@@ -8,6 +8,18 @@ export class GrammarLearnerService {
     private readonly repo: GrammarLearnerRepository,
   ) {}
 
+  // ============================================================
+  // LIBRARY
+  // ============================================================
+
+  getLibrary(userId: number) {
+    return this.repo.getLibrary(userId);
+  }
+
+  // ============================================================
+  // COURSE
+  // ============================================================
+
   getCourse(
     userId: number,
     courseId: string,
@@ -18,6 +30,10 @@ export class GrammarLearnerService {
     );
   }
 
+  // ============================================================
+  // LESSON
+  // ============================================================
+
   getLesson(
     userId: number,
     lessonId: string,
@@ -27,6 +43,10 @@ export class GrammarLearnerService {
       lessonId,
     );
   }
+
+  // ============================================================
+  // COMPLETE SECTION
+  // ============================================================
 
   completeSection(
     userId: number,
@@ -39,6 +59,24 @@ export class GrammarLearnerService {
       sectionId,
     );
   }
+
+  // ============================================================
+  // COMPLETE ENTIRE LESSON
+  // ============================================================
+
+  completeLesson(
+    userId: number,
+    lessonId: string,
+  ) {
+    return this.repo.completeLesson(
+      userId,
+      lessonId,
+    );
+  }
+
+  // ============================================================
+  // QUIZ
+  // ============================================================
 
   submitQuiz(
     userId: number,
@@ -53,11 +91,12 @@ export class GrammarLearnerService {
       score,
     );
   }
-  getDashboard(
-  userId: number,
-) {
-  return this.repo.getDashboard(
-    userId,
-  );
-}
+
+  // ============================================================
+  // DASHBOARD
+  // ============================================================
+
+  getDashboard(userId: number) {
+    return this.repo.getDashboard(userId);
+  }
 }
