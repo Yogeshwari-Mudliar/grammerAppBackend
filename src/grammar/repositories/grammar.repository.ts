@@ -146,33 +146,36 @@ export class GrammarRepository {
     return course;
   }
 
-  async createCourse(dto: CreateCourseDto) {
+async createCourse(dto: CreateCourseDto) {
+  const course = this.courseRepo.create({
+    ...dto,
 
-    const course = this.courseRepo.create({
-      ...dto,
-      isActive: true,
-      isPublished: dto.isPublished ?? true,
-      sortOrder: dto.sortOrder ?? 1,
-    });
+    access:
+      (dto.accessTo ?? 'student') as
+        'student' | 'teacher' | 'both',
 
-    return this.courseRepo.save(course);
-  }
+    isActive: true,
+    isPublished: dto.isPublished ?? true,
+    sortOrder: dto.sortOrder ?? 1,
+  });
 
-  async updateCourse(
-    id: string,
-    dto: UpdateCourseDto,
-  ) {
+  return this.courseRepo.save(course);
+}
+async updateCourse(
+  id: string,
+  dto: UpdateCourseDto,
+) {
+  await this.getCourse(id);
 
-    await this.getCourse(id);
+  await this.courseRepo.update(id, {
+    ...dto,
+    ...(dto.accessTo
+      ? { access: dto.accessTo as 'student' | 'teacher' | 'both' }
+      : {}),
+  });
 
-    await this.courseRepo.update(
-      id,
-      dto,
-    );
-
-    return this.getCourse(id);
-  }
-
+  return this.getCourse(id);
+}
   async deleteCourse(id: string) {
 
     await this.getCourse(id);
@@ -193,103 +196,110 @@ export class GrammarRepository {
   // LESSON
   // =====================================================
 
-  async addLesson(
-    courseId: string,
-    dto: CreateLessonDto,
-    text: string,
-  ) {
+async addLesson(
+  courseId: string,
+  dto: CreateLessonDto,
+  text: string,
+) {
+  const course = await this.getCourse(courseId);
 
-    const course =
-      await this.getCourse(courseId);
-
-    const lesson =
-      this.lessonRepo.create({
-
-        title: dto.title,
-
-        shortDescription:
-          dto.shortDescription,
-
-        duration:
-          dto.duration ?? 0,
-
-        thumbnail:
-          dto.thumbnail ?? '',
-
-        isPublished:
-          dto.isPublished ?? true,
-
-        isActive: true,
-
-        sortOrder:
-          dto.sortOrder ?? 1,
-
-        course,
-
-        courseId,
-      });
-
-    await this.lessonRepo.save(
-      lesson,
-    );
-
-    // Parse uploaded document
-    const sections =
-      buildSections(text);
-
-    // Create sections
-    for (const section of sections) {
-
-      const newSection =
-        this.sectionRepo.create({
-
-          heading:
-            section.heading,
-
-          content:
-            section.content,
-
-          isQuiz:
-            section.isQuiz,
-
-          sectionType:
-            section.sectionType,
-
-          type: 'TEXT',
-
-          imageUrl: '',
-
-          orderNo:
-            section.orderNo,
-
-          xpReward:
-            section.isQuiz
-              ? 25
-              : 10,
-
-          coinReward:
-            section.isQuiz
-              ? 15
-              : 5,
-
-          lesson,
-
-          lessonId:
-            lesson.id,
-
-          isActive: true,
-        });
-
-      await this.sectionRepo.save(
-        newSection,
-      );
-    }
-
-    return this.getLesson(
-      lesson.id,
+  if (!text) {
+    throw new NotFoundException(
+      'Lesson document/text not found',
     );
   }
 
+  const lesson = this.lessonRepo.create({
+    title: dto.title,
+    shortDescription: dto.shortDescription,
+    duration: dto.duration ?? 0,
+    thumbnail: dto.thumbnail ?? '',
+    isPublished: dto.isPublished ?? true,
+    isActive: true,
+    sortOrder: dto.sortOrder ?? 1,
+    course,
+    courseId,
+  });
+
+  await this.lessonRepo.save(lesson);
+
+  // =====================================================
+  // PARSE DOCUMENT
+  // =====================================================
+
+  const sections = buildSections(text);
+
+  // =====================================================
+  // CREATE SECTIONS
+  // =====================================================
+
+  for (const section of sections) {
+    const sectionData: any = {
+      heading: section.heading,
+      content: section.content ?? '',
+
+      isQuiz: section.isQuiz ?? false,
+
+      sectionType:
+        section.sectionType ??
+        (section.isQuiz ? 'QUIZ' : 'TEXT'),
+
+      type: 'TEXT',
+
+      imageUrl: '',
+
+      orderNo: section.orderNo,
+
+      xpReward: section.isQuiz ? 25 : 10,
+
+      coinReward: section.isQuiz ? 15 : 5,
+
+      lesson,
+      lessonId: lesson.id,
+
+      isActive: true,
+    };
+
+    // IMPORTANT:
+    // quizData sirf quiz section ke liye set karo.
+    // Non-quiz ke liye null mat bhejo.
+    if (
+      section.isQuiz &&
+      section.quizData &&
+      Array.isArray(section.quizData.questions)
+    ) {
+      sectionData.quizData = {
+        questions: section.quizData.questions.map(
+          (question: any) => ({
+            question: question.question,
+
+            options: (
+              question.options ?? []
+            ).map((option: any) => ({
+              text: option.text,
+              isCorrect:
+                option.isCorrect ?? false,
+            })),
+
+            ...(question.explanation
+              ? {
+                  explanation:
+                    question.explanation,
+                }
+              : {}),
+          }),
+        ),
+      };
+    }
+
+    const newSection =
+      this.sectionRepo.create(sectionData);
+
+    await this.sectionRepo.save(newSection);
+  }
+
+  return this.getLesson(lesson.id);
+}
   async updateLesson(
     id: string,
     dto: UpdateLessonDto,

@@ -42,10 +42,17 @@
 // }
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
 } from 'class-validator';
+
+enum CourseAccessTo {
+  TEACHER = 'teacher',
+  STUDENT = 'student',
+  BOTH = 'both',
+}
 
 export class CreateCourseDto {
   @IsString()
@@ -63,8 +70,8 @@ export class CreateCourseDto {
   level?: string;
 
   @IsOptional()
-  @IsString()
-  accessTo?: string;
+  @IsEnum(CourseAccessTo)
+  accessTo?: CourseAccessTo;
 
   @IsOptional()
   @IsBoolean()

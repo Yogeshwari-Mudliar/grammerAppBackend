@@ -1,480 +1,834 @@
+export interface ParsedQuizOption {
+  text: string;
+  isCorrect: boolean;
+}
+
+export interface ParsedQuizQuestion {
+  question: string;
+  options: ParsedQuizOption[];
+  explanation: string;
+}
+
 export interface ParsedSection {
   heading: string;
   content: string;
-  orderNo: number;
+
   isQuiz: boolean;
-  sectionType: 'CONTENT' | 'QUIZ';
+  sectionType: string;
+
+  orderNo: number;
+
+  quizData?: {
+    questions: ParsedQuizQuestion[];
+  };
 }
 
-// =====================================================
-// CONSTANTS
-// =====================================================
 
-const QUIZ_HEADING = 'quiz';
+// ============================================================
+// MAIN PARSER
+// ============================================================
 
-const EXAMPLES_HEADING = /^examples?\s*:?\s*$/i;
+export function buildSections(
+  text: string,
+): ParsedSection[] {
 
-const ANSWER_HEADING = /^correct\s+answer\s*:?\s*$/i;
+  if (!text || !text.trim()) {
+    return [];
+  }
 
-const IGNORE_HEADINGS = [
-  'lesson title',
-  'subject / grade level / course name',
-];
+  const normalizedText =
+    text
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
 
-// =====================================================
-// NORMALIZE
-// =====================================================
+  const blocks =
+    splitIntoSections(normalizedText);
 
-function normalizeLine(line: string): string {
-  return line
-    .replace(/\r/g, '')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
-}
+  return blocks.map(
+    (block, index) => {
 
-function normalizeText(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
+      const heading =
+        block.heading.trim();
 
-// =====================================================
-// HELPERS
-// =====================================================
+      const rawContent =
+        block.content.trim();
 
-function isQuizHeading(line: string): boolean {
-  return QUIZ_HEADING === line.toLowerCase().trim();
-}
+      const isQuiz =
+        isQuizHeading(heading) ||
+        looksLikeQuiz(rawContent);
 
-function isExamplesHeading(line: string): boolean {
-  return EXAMPLES_HEADING.test(line.trim());
-}
+      // Quiz raw text database content mein save nahi hoga.
+      // Parsed questions quizData mein jayenge.
+      const content =
+        isQuiz
+          ? ''
+          : rawContent;
 
-function isAnswerHeading(line: string): boolean {
-  return ANSWER_HEADING.test(line.trim());
-}
+      return {
+        heading,
 
-function isIgnoredHeading(line: string): boolean {
-  const value = line.toLowerCase().trim();
+        content,
 
-  return IGNORE_HEADINGS.some(
-    heading => value === heading,
+        isQuiz,
+
+        sectionType:
+          isQuiz
+            ? 'QUIZ'
+            : 'TEXT',
+
+        orderNo:
+          index + 1,
+
+        ...(isQuiz
+          ? {
+              quizData:
+                parseQuiz(rawContent),
+            }
+          : {}),
+      };
+    },
   );
 }
 
-// =====================================================
-// DETECT METADATA
-// =====================================================
 
-function isMetadataLine(
-  line: string,
-  index: number,
-): boolean {
-  const value = line.trim();
+// ============================================================
+// SECTION SPLITTER
+// ============================================================
 
-  // First two lines of the template are metadata
-  if (index === 0 || index === 1) {
-    return true;
-  }
+function splitIntoSections(
+  text: string,
+): {
+  heading: string;
+  content: string;
+}[] {
 
-  return isIgnoredHeading(value);
-}
+  const lines =
+    text.split('\n');
 
-// =====================================================
-// BUILD CONTENT
-// =====================================================
+  const blocks: {
+    heading: string;
+    content: string;
+  }[] = [];
 
-function joinLines(lines: string[]): string {
-  return lines
-    .map(line => line.trim())
-    .filter(Boolean)
-    .join('\n');
-}
+  let currentHeading = '';
 
-// =====================================================
-// BUILD SECTIONS
-// =====================================================
+  let currentContent: string[] = [];
 
-export function buildSections(
-  document: string,
-): ParsedSection[] {
+  for (const rawLine of lines) {
 
-  const normalized = normalizeText(document);
+    const line =
+      rawLine.trim();
 
-  if (!normalized) {
-    return [];
-  }
+    // ---------------------------------------------
+    // BLANK LINE
+    // ---------------------------------------------
 
-  const lines = normalized
-    .split('\n')
-    .map(normalizeLine)
-    .filter(Boolean);
+    if (!line) {
 
-  if (!lines.length) {
-    return [];
-  }
-
-  const sections: ParsedSection[] = [];
-
-  let currentSection: ParsedSection | null = null;
-
-  let insideQuiz = false;
-
-  // ===================================================
-  // PROCESS LINES
-  // ===================================================
-
-  for (let i = 0; i < lines.length; i++) {
-
-    const line = lines[i];
-
-    // -----------------------------------------------
-    // Ignore document metadata
-    // -----------------------------------------------
-
-    if (!sections.length && !currentSection) {
-
-      if (isMetadataLine(line, i)) {
-        continue;
-      }
-
-    }
-
-    // -----------------------------------------------
-    // QUIZ
-    // -----------------------------------------------
-
-    if (isQuizHeading(line)) {
-
-      // Save previous content section
-      if (currentSection) {
-
-        sections.push(currentSection);
-
-        currentSection = null;
-      }
-
-      insideQuiz = true;
-
-      currentSection = {
-        heading: 'Quiz',
-        content: '',
-        orderNo: sections.length + 1,
-        isQuiz: true,
-        sectionType: 'QUIZ',
-      };
-
-      continue;
-    }
-
-    // -----------------------------------------------
-    // Everything after Quiz belongs to Quiz
-    // -----------------------------------------------
-
-    if (insideQuiz) {
-
-      if (currentSection) {
-
-        currentSection.content =
-          appendContent(
-            currentSection.content,
-            line,
-          );
+      if (currentContent.length > 0) {
+        currentContent.push('');
       }
 
       continue;
     }
 
-    // -----------------------------------------------
-    // EXAMPLES
-    // -----------------------------------------------
 
-    if (isExamplesHeading(line)) {
+    // ---------------------------------------------
+    // SECTION HEADING
+    // ---------------------------------------------
 
-      if (currentSection) {
+    if (isSectionHeading(line)) {
 
-        currentSection.content =
-          appendContent(
-            currentSection.content,
-            line,
-          );
+      // Save previous section
+      if (currentHeading) {
+
+        blocks.push({
+          heading:
+            currentHeading,
+
+          content:
+            currentContent
+              .join('\n')
+              .trim(),
+        });
       }
 
-      continue;
-    }
+      currentHeading =
+        cleanHeading(line);
 
-    // -----------------------------------------------
-    // CORRECT ANSWER
-    // -----------------------------------------------
-
-    if (isAnswerHeading(line)) {
-
-      if (currentSection) {
-
-        currentSection.content =
-          appendContent(
-            currentSection.content,
-            line,
-          );
-      }
+      currentContent = [];
 
       continue;
     }
 
-    // -----------------------------------------------
-    // FIRST REAL HEADING
-    // -----------------------------------------------
 
-    if (!currentSection) {
-
-      currentSection = {
-        heading: line,
-        content: '',
-        orderNo: sections.length + 1,
-        isQuiz: false,
-        sectionType: 'CONTENT',
-      };
-
-      continue;
-    }
-
-    // -----------------------------------------------
-    // NEW TOPIC
-    //
-    // A line becomes a new topic when it is not:
-    // - Examples
-    // - Quiz
-    // - Correct answer
-    //
-    // The template expects topic → content → examples
-    // -----------------------------------------------
-
-    if (isLikelyHeading(line, lines, i)) {
-
-      sections.push(currentSection);
-
-      currentSection = {
-        heading: line,
-        content: '',
-        orderNo: sections.length + 1,
-        isQuiz: false,
-        sectionType: 'CONTENT',
-      };
-
-      continue;
-    }
-
-    // -----------------------------------------------
+    // ---------------------------------------------
     // NORMAL CONTENT
-    // -----------------------------------------------
+    // ---------------------------------------------
 
-    currentSection.content =
-      appendContent(
-        currentSection.content,
-        line,
-      );
+    currentContent.push(rawLine);
   }
 
-  // ===================================================
+
+  // ---------------------------------------------
   // SAVE LAST SECTION
-  // ===================================================
+  // ---------------------------------------------
 
-  if (currentSection) {
-    sections.push(currentSection);
-  }
+  if (currentHeading) {
 
-  // ===================================================
-  // CLEAN SECTIONS
-  // ===================================================
+    blocks.push({
+      heading:
+        currentHeading,
 
-  return sections
-    .map((section, index) => ({
-      ...section,
-      orderNo: index + 1,
-      content: section.content.trim(),
-    }))
-    .filter(section => {
-      return (
-        section.heading.trim().length > 0 ||
-        section.content.trim().length > 0
-      );
+      content:
+        currentContent
+          .join('\n')
+          .trim(),
     });
-}
-
-// =====================================================
-// APPEND CONTENT
-// =====================================================
-
-function appendContent(
-  existing: string,
-  line: string,
-): string {
-
-  if (!existing) {
-    return line;
   }
 
-  return `${existing}\n${line}`;
+
+  // ---------------------------------------------
+  // FALLBACK
+  // ---------------------------------------------
+
+  if (blocks.length === 0) {
+
+    return [
+      {
+        heading: 'Lesson',
+        content: text.trim(),
+      },
+    ];
+  }
+
+  return blocks;
 }
 
-// =====================================================
-// HEADING DETECTION
-// =====================================================
 
-function isLikelyHeading(
+// ============================================================
+// SECTION HEADING DETECTION
+//
+// IMPORTANT:
+// Your document format is fixed.
+//
+// Numbered lines like:
+//
+// 1. I could swim.
+// 2. She could sing.
+//
+// are EXAMPLES, NOT section headings.
+//
+// Therefore we DO NOT use a generic rule like:
+// /^\d+\./
+//
+// ============================================================
+
+function isSectionHeading(
   line: string,
-  lines: string[],
-  index: number,
 ): boolean {
 
-  const value = line.trim();
+  const value =
+    line
+      .trim()
+      .replace(/^#+\s*/, '')
+      .trim();
 
   if (!value) {
     return false;
   }
 
-  // ------------------------------------------------
-  // NEVER HEADING
-  // ------------------------------------------------
 
-  // Numbered content
-  // 1. It might rain.
-  // 2. She might come later.
-  if (/^\d+[.)]\s+/.test(value)) {
-    return false;
+  // ---------------------------------------------
+  // MARKDOWN HEADINGS
+  // Example:
+  // # Introduction
+  // ## Structure of Could
+  // ---------------------------------------------
+
+  if (/^#{1,6}\s+/.test(line)) {
+    return true;
   }
 
-  // Alphabetic options
-  // (a) ...
-  // (b) ...
-  // A. ...
-  // B. ...
+
+  // ---------------------------------------------
+  // QUIZ
+  // ---------------------------------------------
+
+  if (/^quiz$/i.test(value)) {
+    return true;
+  }
+
+
+  // ---------------------------------------------
+  // INTRODUCTION
+  // ---------------------------------------------
+
+  if (/^introduction$/i.test(value)) {
+    return true;
+  }
+
+
+  // ---------------------------------------------
+  // USE HEADINGS
+  //
+  // Use 1: Past Ability
+  // Use 2: Polite Request
+  // Use 3: Suggestion
+  // Use 4: Possibility in the Past
+  //
+  // Also supports:
+  // Use 1 - Past Ability
+  // Use 1. Past Ability
+  // ---------------------------------------------
+
   if (
-    /^\([a-d]\)\s+/i.test(value) ||
-    /^[A-D][.)]\s+/i.test(value)
+    /^use\s+\d+\s*[:.\-]\s*.+$/i.test(value)
   ) {
-    return false;
+    return true;
   }
 
-  // Answer / examples stay inside current section
-  if (isAnswerHeading(value)) {
-    return false;
-  }
 
-  if (isExamplesHeading(value)) {
-    return false;
-  }
-
-  // ------------------------------------------------
-  // SENTENCE = CONTENT
-  // ------------------------------------------------
-
-  if (/[.!?]$/.test(value)) {
-    return false;
-  }
-
-  // ------------------------------------------------
-  // STRUCTURE / DEFINITION LINES = CONTENT
-  // ------------------------------------------------
-  
-  const lower = value.toLowerCase();
-
-  const contentPatterns = [
-    /^subject\s*\+/i,
-    /^negative\s+structure\s*:/i,
-    /^positive\s+structure\s*:/i,
-    /^question\s+structure\s*:/i,
-    /^structure\s*:/i,
-    /^might\s+is\s+/i,
-    /^might\s+shows?\s+/i,
-    /^might\s+can\s+/i,
-    /^it\s+is\s+/i,
-    /^it\s+can\s+/i,
-    /^this\s+is\s+/i,
-    /^this\s+means\s+/i,
-    /^used\s+to\s+/i,
-    /^used\s+for\s+/i,
-    /^can\s+be\s+used\s+to\s+/i,
-  ];
+  // ---------------------------------------------
+  // STRUCTURE HEADINGS
+  //
+  // Structure of COULD
+  // Structure: Could Have
+  // Structure - Could Have
+  // ---------------------------------------------
 
   if (
-    contentPatterns.some(pattern =>
-      pattern.test(value)
+    /^structure\s+(of\s+.+)$/i.test(value)
+  ) {
+    return true;
+  }
+
+  if (
+    /^structure\s*[:\-]\s*.+$/i.test(value)
+  ) {
+    return true;
+  }
+
+
+  // ---------------------------------------------
+  // NEGATIVE FORM
+  // ---------------------------------------------
+
+  if (/^negative\s+form$/i.test(value)) {
+    return true;
+  }
+
+
+  // ---------------------------------------------
+  // OPTIONAL COMMON FIXED-FORMAT HEADINGS
+  //
+  // These allow future grammar lessons to use
+  // similar standard lesson structures.
+  // ---------------------------------------------
+
+  if (
+    /^(affirmative\s+form|interrogative\s+form|question\s+form)$/i.test(
+      value,
     )
   ) {
+    return true;
+  }
+
+  if (
+    /^(usage|uses|examples|summary|practice|activities)$/i.test(
+      value,
+    )
+  ) {
+    return true;
+  }
+
+
+  return false;
+}
+
+
+// ============================================================
+// CLEAN HEADING
+//
+// We do NOT remove "1." generically because numbered
+// example lines are not headings.
+//
+// ============================================================
+
+function cleanHeading(
+  line: string,
+): string {
+
+  return line
+    .replace(/^#+\s*/, '')
+    .trim();
+}
+
+
+// ============================================================
+// QUIZ HEADING
+// ============================================================
+
+function isQuizHeading(
+  heading: string,
+): boolean {
+
+  return /^quiz$/i.test(
+    heading.trim(),
+  );
+}
+
+
+// ============================================================
+// QUIZ CONTENT DETECTION
+//
+// This is a fallback.
+// Main detection is heading === Quiz.
+//
+// ============================================================
+
+function looksLikeQuiz(
+  content: string,
+): boolean {
+
+  if (!content) {
     return false;
   }
 
-  // ------------------------------------------------
-  // QUESTION / INSTRUCTION = CONTENT
-  // ------------------------------------------------
+  const hasQuestion =
+    /Question\s+\d+\s*:/i.test(content);
+
+  return hasQuestion;
+}
+
+
+// ============================================================
+// QUIZ PARSER
+// ============================================================
+
+function parseQuiz(
+  content: string,
+): {
+  questions: ParsedQuizQuestion[];
+} {
+
+  if (!content) {
+    return {
+      questions: [],
+    };
+  }
+
+  const questions: ParsedQuizQuestion[] =
+    [];
+
+  const lines =
+    content
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .split('\n')
+      .map(line => line.trim());
+
+
+  // ---------------------------------------------
+  // FIND:
+  //
+  // Question 1:
+  // Question 2:
+  // Question 3:
+  // ---------------------------------------------
+
+  const questionIndexes: number[] =
+    [];
+
+  lines.forEach(
+    (line, index) => {
+
+      if (
+        /^Question\s+\d+\s*:/i.test(line)
+      ) {
+        questionIndexes.push(index);
+      }
+    },
+  );
+
+
+  // ---------------------------------------------
+  // PARSE EACH QUESTION BLOCK
+  // ---------------------------------------------
+
+  for (
+    let i = 0;
+    i < questionIndexes.length;
+    i++
+  ) {
+
+    const start =
+      questionIndexes[i];
+
+    const end =
+      questionIndexes[i + 1] ??
+      lines.length;
+
+    const block =
+      lines
+        .slice(start, end)
+        .join('\n')
+        .trim();
+
+    const question =
+      parseQuestionBlock(block);
+
+    if (question) {
+      questions.push(question);
+    }
+  }
+
+  return {
+    questions,
+  };
+}
+
+
+// ============================================================
+// SINGLE QUESTION PARSER
+// ============================================================
+
+function parseQuestionBlock(
+  block: string,
+): ParsedQuizQuestion | null {
+
+  if (!block) {
+    return null;
+  }
+
+  const lines =
+    block
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean);
+
+
+  // ---------------------------------------------
+  // FIND QUESTION HEADER
+  // ---------------------------------------------
+
+  const questionIndex =
+    lines.findIndex(
+      line =>
+        /^Question\s+\d+\s*:/i.test(line),
+    );
+
+  if (questionIndex === -1) {
+    return null;
+  }
+
+
+  // ==========================================================
+  // QUESTION TEXT
+  //
+  // Supports:
+  //
+  // Question 1: What is the correct answer?
+  //
+  // AND:
+  //
+  // Question 1:
+  // What is the correct answer?
+  //
+  // Also supports questions without options,
+  // such as "Make your own sentence..."
+  // ==========================================================
+
+  const questionHeader =
+    lines[questionIndex];
+
+  let questionText =
+    questionHeader
+      .replace(
+        /^Question\s+\d+\s*:\s*/i,
+        '',
+      )
+      .trim();
+
+
+  if (!questionText) {
+
+    const questionLines: string[] =
+      [];
+
+    for (
+      let i = questionIndex + 1;
+      i < lines.length;
+      i++
+    ) {
+
+      const line =
+        lines[i];
+
+
+      // Stop when options start
+      if (/^[A-D][.)]\s+/i.test(line)) {
+        break;
+      }
+
+
+      // Stop at Correct answer
+      if (
+        /^Correct\s+answer\s*:/i.test(line)
+      ) {
+        break;
+      }
+
+
+      // Stop at Explanation
+      if (
+        /^Explanation\s*:/i.test(line)
+      ) {
+        break;
+      }
+
+
+      // Stop at Sample answer
+      //
+      // Sample answer should NOT become
+      // part of the question text.
+      if (
+        /^Sample\s+answer\s*:/i.test(line)
+      ) {
+        break;
+      }
+
+
+      questionLines.push(line);
+    }
+
+    questionText =
+      questionLines
+        .join(' ')
+        .trim();
+  }
+
+
+  // ==========================================================
+  // OPTIONS
+  // ==========================================================
+
+  const options: ParsedQuizOption[] =
+    [];
+
+  const optionRegex =
+    /^([A-D])[.)]\s*(.+)$/i;
+
+
+  let correctLetter:
+    string | null = null;
+
+  let correctAnswerText:
+    string | null = null;
+
+  let explanation =
+    '';
+
+  let explanationStarted =
+    false;
+
+
+  // ---------------------------------------------
+  // PARSE REMAINING LINES
+  // ---------------------------------------------
+
+  for (
+    let i = questionIndex + 1;
+    i < lines.length;
+    i++
+  ) {
+
+    const line =
+      lines[i];
+
+
+    // -------------------------------------------
+    // OPTION
+    // -------------------------------------------
+
+    const optionMatch =
+      line.match(optionRegex);
+
+    if (optionMatch) {
+
+      options.push({
+        text:
+          optionMatch[2].trim(),
+
+        isCorrect:
+          false,
+      });
+
+      continue;
+    }
+
+
+    // -------------------------------------------
+    // CORRECT ANSWER
+    // -------------------------------------------
+
+    const correctMatch =
+      line.match(
+        /^Correct\s+answer\s*:\s*(.+)$/i,
+      );
+
+    if (correctMatch) {
+
+      const answer =
+        correctMatch[1].trim();
+
+      correctAnswerText =
+        answer;
+
+
+      // Supports:
+      //
+      // B
+      // B.
+      // B) could
+      // B. could
+      // -----------------------------------------
+
+      const letterMatch =
+        answer.match(
+          /^([A-D])(?:[.)]|\s|$)/i,
+        );
+
+      if (letterMatch) {
+
+        correctLetter =
+          letterMatch[1]
+            .toUpperCase();
+
+      } else {
+
+        // Correct answer supplied directly as text
+        const answerOption =
+          options.find(
+            option =>
+              option.text
+                .trim()
+                .toLowerCase() ===
+              answer
+                .trim()
+                .toLowerCase(),
+          );
+
+        if (answerOption) {
+
+          answerOption.isCorrect =
+            true;
+        }
+      }
+
+      continue;
+    }
+
+
+    // -------------------------------------------
+    // EXPLANATION
+    // -------------------------------------------
+
+    const explanationMatch =
+      line.match(
+        /^Explanation\s*:\s*(.*)$/i,
+      );
+
+    if (explanationMatch) {
+
+      explanationStarted =
+        true;
+
+      explanation =
+        explanationMatch[1]
+          .trim();
+
+      continue;
+    }
+
+
+    // -------------------------------------------
+    // CONTINUE MULTI-LINE EXPLANATION
+    // -------------------------------------------
+
+    if (explanationStarted) {
+
+      explanation =
+        explanation
+          ? `${explanation} ${line}`
+          : line;
+    }
+  }
+
+
+  // ==========================================================
+  // MARK CORRECT OPTION USING LETTER
+  // ==========================================================
+
+  if (correctLetter) {
+
+    const correctIndex =
+      correctLetter.charCodeAt(0) -
+      'A'.charCodeAt(0);
+
+    if (options[correctIndex]) {
+
+      options[
+        correctIndex
+      ].isCorrect = true;
+    }
+  }
+
+
+  // ==========================================================
+  // FALLBACK:
+  // MATCH CORRECT ANSWER WITH OPTION TEXT
+  // ==========================================================
 
   if (
-    /^make\s+/i.test(value) ||
-    /^choose\s+/i.test(value) ||
-    /^select\s+/i.test(value) ||
-    /^fill\s+/i.test(value) ||
-    /^complete\s+/i.test(value) ||
-    /^write\s+/i.test(value)
+    correctAnswerText &&
+    !options.some(
+      option => option.isCorrect,
+    )
   ) {
-    return false;
+
+    const cleanedAnswer =
+      correctAnswerText
+        .replace(
+          /^([A-D])[.)]\s*/i,
+          '',
+        )
+        .trim()
+        .toLowerCase();
+
+    const matchingOption =
+      options.find(
+        option =>
+          option.text
+            .trim()
+            .toLowerCase() ===
+          cleanedAnswer,
+      );
+
+    if (matchingOption) {
+      matchingOption.isCorrect = true;
+    }
   }
 
-  // ------------------------------------------------
-  // LONG SENTENCES = CONTENT
-  // ------------------------------------------------
 
-  if (value.length > 100) {
-    return false;
-  }
+  // ==========================================================
+  // RETURN
+  // ==========================================================
 
-  const words = value.split(/\s+/);
-
-  if (words.length > 12) {
-    return false;
-  }
-
-  // ------------------------------------------------
-  // KNOWN TOPIC HEADINGS
-  // ------------------------------------------------
-
-  // Explicitly recognize common grammar-topic headings.
-  if (
-    /^(introduction|conclusion)$/i.test(value)
-  ) {
-    return true;
-  }
-
-  if (
-    /^structure\s+of\s+/i.test(value)
-  ) {
-    return true;
-  }
-
-  if (
-    /^use\s+\d+\s*:/i.test(value)
-  ) {
-    return true;
-  }
-
-  if (
-    /^(negative\s+form|positive\s+form|question\s+form)$/i.test(value)
-  ) {
-    return true;
-  }
-
-  if (
-    /^(future\s+possibility|more\s+examples.*|more\s+suggestion.*)$/i.test(value)
-  ) {
-    return true;
-  }
-
-  // ------------------------------------------------
-  // DEFAULT
-  // ------------------------------------------------
-
-  return true;
+  return {
+    question: questionText,
+    options,
+    explanation,
+  };
 }

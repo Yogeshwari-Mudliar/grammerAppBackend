@@ -526,108 +526,88 @@ export class GrammarLearnerRepository {
       ]),
     );
 
-    const sections = [
-      ...(lesson.sections ?? []),
-    ]
-      .filter(
-        section =>
-          section.isActive,
-      )
-      .sort(
-        (a, b) =>
-          a.orderNo -
-          b.orderNo,
-      )
-      .map((section, index) => {
-        const userSection =
-          sectionMap.get(section.id);
+   const sections = [
+  ...(lesson.sections ?? []),
+]
+  .filter(section => section.isActive)
+  .sort((a, b) => a.orderNo - b.orderNo)
+  .map((section, index) => {
 
-        return {
-          id: section.id,
-          heading: section.heading,
-          content: section.content,
-          type: section.type,
-          imageUrl: section.imageUrl,
-          orderNo: section.orderNo,
-          sectionType:
-            section.sectionType,
-          xpReward:
-            section.xpReward,
-          coinReward:
-            section.coinReward,
-          isQuiz:
-            section.isQuiz,
-
-          isUnlocked:
-            userSection?.isUnlocked ??
-            index === 0,
-
-          isCompleted:
-            userSection?.isCompleted ??
-            false,
-
-          earnedXp:
-            userSection?.earnedXp ?? 0,
-
-          earnedCoins:
-            userSection?.earnedCoins ?? 0,
-
-          completedAt:
-            userSection?.completedAt ??
-            null,
-        };
-      });
+    const userSection =
+      sectionMap.get(section.id);
 
     return {
-      id: lesson.id,
+      id: section.id,
+      heading: section.heading,
+      content: section.content,
+      type: section.type,
+      imageUrl: section.imageUrl,
+      orderNo: section.orderNo,
+      sectionType: section.sectionType,
 
-      title: lesson.title,
+      xpReward: section.xpReward,
+      coinReward: section.coinReward,
 
-      shortDescription:
-        lesson.shortDescription,
+      isQuiz: section.isQuiz,
 
-      thumbnail:
-        lesson.thumbnail,
-
-      duration:
-        lesson.duration,
-
-      courseId:
-        lesson.courseId,
-
-      course: lesson.course
+      quizData: section.isQuiz
         ? {
-            id: lesson.course.id,
-            title: lesson.course.title,
+            questions: (
+              section.quizData?.questions ?? []
+            ).map(q => ({
+              question: q.question,
+              options: q.options.map(o => ({
+                text: o.text,
+              })),
+            })),
           }
         : null,
 
-      progress:
-        userLesson.progress,
-
-      completedSections:
-        userLesson.completedSections,
-
-      totalSections:
-        userLesson.totalSections,
-
-      earnedXp:
-        userLesson.earnedXp,
-
-      earnedCoins:
-        userLesson.earnedCoins,
-
       isUnlocked:
-        userLesson.isUnlocked,
-
-      isStarted:
-        userLesson.isStarted,
+        userSection?.isUnlocked ?? index === 0,
 
       isCompleted:
-        userLesson.isCompleted,
+        userSection?.isCompleted ?? false,
 
-      sections,
+      earnedXp:
+        userSection?.earnedXp ?? 0,
+
+      earnedCoins:
+        userSection?.earnedCoins ?? 0,
+
+      completedAt:
+        userSection?.completedAt ?? null,
     };
+  });
+
+return {
+  id: lesson.id,
+  title: lesson.title,
+  shortDescription: lesson.shortDescription,
+  thumbnail: lesson.thumbnail,
+  duration: lesson.duration,
+
+  courseId: lesson.courseId,
+
+  course: lesson.course
+    ? {
+        id: lesson.course.id,
+        title: lesson.course.title,
+      }
+    : null,
+
+  progress: userLesson.progress,
+  completedSections: userLesson.completedSections,
+  totalSections: userLesson.totalSections,
+  earnedXp: userLesson.earnedXp,
+  earnedCoins: userLesson.earnedCoins,
+
+  isUnlocked: userLesson.isUnlocked,
+  isStarted: userLesson.isStarted,
+  isCompleted: userLesson.isCompleted,
+
+  sections,
+};
   }
 
   // ============================================================
@@ -1494,438 +1474,492 @@ export class GrammarLearnerRepository {
   // QUIZ
   // ============================================================
 
-  async submitQuiz(
-    userId: number,
-    lessonId: string,
-    sectionId: string,
-    score: number,
-  ) {
-    return this.dataSource.transaction(
-      async manager => {
+async submitQuiz(
+  userId: number,
+  lessonId: string,
+  sectionId: string,
+  answers: number[],
+) {
+  return this.dataSource.transaction(
+    async manager => {
 
-        const lesson =
-          await manager.findOne(
-            GrammarLesson,
-            {
-              where: {
-                id: lessonId,
-                isActive: true,
-              },
+      const lesson =
+        await manager.findOne(
+          GrammarLesson,
+          {
+            where: {
+              id: lessonId,
+              isActive: true,
             },
-          );
+          },
+        );
 
-        if (!lesson) {
-          throw new NotFoundException(
-            'Lesson not found',
-          );
-        }
+      if (!lesson) {
+        throw new NotFoundException(
+          'Lesson not found',
+        );
+      }
 
-        const section =
-          await manager.findOne(
-            GrammarSection,
-            {
-              where: {
-                id: sectionId,
-                lessonId,
-                isActive: true,
-              },
+      const section =
+        await manager.findOne(
+          GrammarSection,
+          {
+            where: {
+              id: sectionId,
+              lessonId,
+              isActive: true,
             },
-          );
+          },
+        );
 
-        if (!section) {
-          throw new NotFoundException(
-            'Quiz section not found',
-          );
-        }
+      if (!section) {
+        throw new NotFoundException(
+          'Quiz section not found',
+        );
+      }
 
-        if (!section.isQuiz) {
-          throw new NotFoundException(
-            'This section is not a quiz',
-          );
-        }
+      if (!section.isQuiz) {
+        throw new NotFoundException(
+          'This section is not a quiz',
+        );
+      }
 
-        const numericScore =
-          Number(score);
+      const questions =
+        section.quizData?.questions ?? [];
 
-        const passed =
-          numericScore >= 70;
+      if (!questions.length) {
+        throw new NotFoundException(
+          'No quiz questions found',
+        );
+      }
 
-        const previousQuiz =
-          await manager.findOne(
-            GrammarUserQuiz,
-            {
-              where: {
-                userId,
-                lessonId,
-                sectionId,
-              },
-              order: {
-                attemptNo: 'DESC',
-              },
-            },
-          );
+      let correctAnswers = 0;
 
-        const attemptNo =
-          previousQuiz
-            ? previousQuiz.attemptNo + 1
-            : 1;
+      const results = questions.map(
+        (question, index) => {
 
-        const quiz =
-          manager.create(
-            GrammarUserQuiz,
-            {
+          const selectedIndex =
+            answers[index];
+
+          const correctIndex =
+            question.options.findIndex(
+              option => option.isCorrect,
+            );
+
+          const isCorrect =
+            selectedIndex === correctIndex;
+
+          if (isCorrect) {
+            correctAnswers++;
+          }
+
+          return {
+            question: question.question,
+            selectedAnswer:
+              question.options[selectedIndex]?.text ?? null,
+            correctAnswer:
+              question.options[correctIndex]?.text ?? null,
+            isCorrect,
+            explanation:
+              question.explanation ?? '',
+          };
+        },
+      );
+
+      const totalQuestions =
+        questions.length;
+
+      const numericScore =
+        Math.round(
+          (correctAnswers /
+            totalQuestions) *
+            100,
+        );
+
+      const passed =
+        numericScore >= 70;
+
+      const previousQuiz =
+        await manager.findOne(
+          GrammarUserQuiz,
+          {
+            where: {
               userId,
               lessonId,
               sectionId,
-              attemptNo,
-
-              score: numericScore,
-
-              totalQuestions: 0,
-              correctAnswers: 0,
-
-              isPassed: passed,
-
-              earnedXp:
-                passed ? 25 : 0,
-
-              earnedCoins:
-                passed ? 10 : 0,
-
-              submittedAt:
-                new Date(),
             },
-          );
-
-        await manager.save(quiz);
-
-        // Failed quiz = attempt recorded only.
-        if (!passed) {
-          return {
-            success: true,
-            passed: false,
-            score: numericScore,
-            earnedXp: 0,
-            earnedCoins: 0,
-            sectionCompleted: false,
-          };
-        }
-
-        // ------------------------------------------------
-        // IF SECTION ALREADY COMPLETED
-        // Don't give rewards again.
-        // ------------------------------------------------
-
-        const existingSection =
-          await manager.findOne(
-            GrammarUserSection,
-            {
-              where: {
-                userId,
-                lessonId,
-                sectionId,
-              },
+            order: {
+              attemptNo: 'DESC',
             },
-          );
-
-        if (
-          existingSection?.isCompleted
-        ) {
-          return {
-            success: true,
-            passed: true,
-            score: numericScore,
-            earnedXp: 0,
-            earnedCoins: 0,
-            sectionCompleted: true,
-            alreadyCompleted: true,
-          };
-        }
-
-        // ------------------------------------------------
-        // Complete quiz section
-        // ------------------------------------------------
-
-        let userSection =
-          existingSection;
-
-        if (!userSection) {
-          userSection =
-            manager.create(
-              GrammarUserSection,
-              {
-                userId,
-                lessonId,
-                sectionId,
-
-                isUnlocked: true,
-                isCompleted: false,
-
-                earnedXp: 0,
-                earnedCoins: 0,
-              },
-            );
-        }
-
-        userSection.isUnlocked = true;
-        userSection.isCompleted = true;
-        userSection.completedAt =
-          new Date();
-
-        userSection.earnedXp = 25;
-        userSection.earnedCoins = 10;
-
-        await manager.save(
-          userSection,
+          },
         );
 
-        // ------------------------------------------------
-        // USER LESSON
-        // ------------------------------------------------
+      const attemptNo =
+        previousQuiz
+          ? previousQuiz.attemptNo + 1
+          : 1;
 
-        let userLesson =
-          await manager.findOne(
-            GrammarUserLesson,
-            {
-              where: {
-                userId,
-                lessonId,
-              },
-            },
-          );
+      const quiz =
+        manager.create(
+          GrammarUserQuiz,
+          {
+            userId,
+            lessonId,
+            sectionId,
+            attemptNo,
 
-        const totalSections =
-          await manager.count(
-            GrammarSection,
-            {
-              where: {
-                lessonId,
-                isActive: true,
-              },
-            },
-          );
+            score: numericScore,
 
-        if (!userLesson) {
-          userLesson =
-            manager.create(
-              GrammarUserLesson,
-              {
-                userId,
-                lessonId,
-                courseId:
-                  lesson.courseId,
+            totalQuestions,
+            correctAnswers,
 
-                isUnlocked: true,
-                isStarted: true,
-                isCompleted: false,
+            isPassed: passed,
 
-                startedAt:
-                  new Date(),
+            earnedXp:
+              passed ? 25 : 0,
 
-                totalSections,
+            earnedCoins:
+              passed ? 10 : 0,
 
-                completedSections: 0,
-                progress: 0,
-
-                earnedXp: 0,
-                earnedCoins: 0,
-              },
-            );
-        }
-
-        const completedSections =
-          await manager.count(
-            GrammarUserSection,
-            {
-              where: {
-                userId,
-                lessonId,
-                isCompleted: true,
-              },
-            },
-          );
-
-        userLesson.totalSections =
-          totalSections;
-
-        userLesson.completedSections =
-          completedSections;
-
-        userLesson.progress =
-          totalSections > 0
-            ? Number(
-                (
-                  completedSections /
-                  totalSections *
-                  100
-                ).toFixed(2),
-              )
-            : 100;
-
-        userLesson.earnedXp += 25;
-        userLesson.earnedCoins += 10;
-
-        const wasLessonCompleted =
-          userLesson.isCompleted;
-
-        if (
-          completedSections >=
-          totalSections
-        ) {
-          userLesson.progress = 100;
-          userLesson.isCompleted = true;
-
-          if (!userLesson.completedAt) {
-            userLesson.completedAt =
-              new Date();
-          }
-        }
-
-        await manager.save(
-          userLesson,
+            submittedAt:
+              new Date(),
+          },
         );
 
-        // ------------------------------------------------
-        // PROFILE
-        // ------------------------------------------------
+      await manager.save(quiz);
 
-        let profile =
-          await manager.findOne(
-            GrammarUserProfile,
-            {
-              where: {
-                userId,
-              },
+      // Failed quiz
+      if (!passed) {
+        return {
+          success: true,
+          passed: false,
+          score: numericScore,
+
+          totalQuestions,
+          correctAnswers,
+
+          earnedXp: 0,
+          earnedCoins: 0,
+
+          sectionCompleted: false,
+
+          results,
+        };
+      }
+
+      // Already completed
+      const existingSection =
+        await manager.findOne(
+          GrammarUserSection,
+          {
+            where: {
+              userId,
+              lessonId,
+              sectionId,
             },
-          );
+          },
+        );
 
-        if (!profile) {
-          profile =
-            manager.create(
-              GrammarUserProfile,
-              {
-                userId,
-                level: 1,
-
-                totalXp: 0,
-                totalCoins: 0,
-
-                completedCourses: 0,
-                completedLessons: 0,
-                completedSections: 0,
-                completedQuizzes: 0,
-
-                currentStreak: 0,
-                longestStreak: 0,
-
-                lastActivityAt:
-                  new Date(),
-              },
-            );
-        }
-
-        profile.totalXp += 25;
-        profile.totalCoins += 10;
-        profile.completedSections += 1;
-        profile.completedQuizzes += 1;
-
-        if (
-          userLesson.isCompleted &&
-          !wasLessonCompleted
-        ) {
-          profile.completedLessons += 1;
-        }
-
-        profile.lastActivityAt =
-          new Date();
-
-        while (
-          profile.totalXp >=
-          profile.level * 100
-        ) {
-          profile.level++;
-        }
-
-        await manager.save(profile);
-
-        // ------------------------------------------------
-        // NEXT SECTION
-        // ------------------------------------------------
-
-        const nextSection =
-          await manager.findOne(
-            GrammarSection,
-            {
-              where: {
-                lessonId,
-                isActive: true,
-                orderNo:
-                  section.orderNo + 1,
-              },
-            },
-          );
-
-        if (nextSection) {
-          let nextUserSection =
-            await manager.findOne(
-              GrammarUserSection,
-              {
-                where: {
-                  userId,
-                  lessonId,
-                  sectionId:
-                    nextSection.id,
-                },
-              },
-            );
-
-          if (!nextUserSection) {
-            nextUserSection =
-              manager.create(
-                GrammarUserSection,
-                {
-                  userId,
-                  lessonId,
-                  sectionId:
-                    nextSection.id,
-
-                  isUnlocked: true,
-                  isCompleted: false,
-
-                  earnedXp: 0,
-                  earnedCoins: 0,
-                },
-              );
-          } else {
-            nextUserSection.isUnlocked =
-              true;
-          }
-
-          await manager.save(
-            nextUserSection,
-          );
-        }
-
+      if (
+        existingSection?.isCompleted
+      ) {
         return {
           success: true,
           passed: true,
           score: numericScore,
 
-          earnedXp: 25,
-          earnedCoins: 10,
+          totalQuestions,
+          correctAnswers,
+
+          earnedXp: 0,
+          earnedCoins: 0,
 
           sectionCompleted: true,
-          alreadyCompleted: false,
+          alreadyCompleted: true,
 
-          lessonProgress:
-            userLesson.progress,
-
-          lessonCompleted:
-            userLesson.isCompleted,
+          results,
         };
-      },
-    );
-  }
+      }
+
+      // Complete section
+      let userSection =
+        existingSection;
+
+      if (!userSection) {
+        userSection =
+          manager.create(
+            GrammarUserSection,
+            {
+              userId,
+              lessonId,
+              sectionId,
+
+              isUnlocked: true,
+              isCompleted: false,
+
+              earnedXp: 0,
+              earnedCoins: 0,
+            },
+          );
+      }
+
+      userSection.isUnlocked = true;
+      userSection.isCompleted = true;
+      userSection.completedAt =
+        new Date();
+
+      userSection.earnedXp = 25;
+      userSection.earnedCoins = 10;
+
+      await manager.save(
+        userSection,
+      );
+
+      // USER LESSON
+      let userLesson =
+        await manager.findOne(
+          GrammarUserLesson,
+          {
+            where: {
+              userId,
+              lessonId,
+            },
+          },
+        );
+
+      const totalSections =
+        await manager.count(
+          GrammarSection,
+          {
+            where: {
+              lessonId,
+              isActive: true,
+            },
+          },
+        );
+
+      if (!userLesson) {
+        userLesson =
+          manager.create(
+            GrammarUserLesson,
+            {
+              userId,
+              lessonId,
+              courseId:
+                lesson.courseId,
+
+              isUnlocked: true,
+              isStarted: true,
+              isCompleted: false,
+
+              startedAt:
+                new Date(),
+
+              totalSections,
+
+              completedSections: 0,
+              progress: 0,
+
+              earnedXp: 0,
+              earnedCoins: 0,
+            },
+          );
+      }
+
+      const completedSections =
+        await manager.count(
+          GrammarUserSection,
+          {
+            where: {
+              userId,
+              lessonId,
+              isCompleted: true,
+            },
+          },
+        );
+
+      userLesson.totalSections =
+        totalSections;
+
+      userLesson.completedSections =
+        completedSections;
+
+      userLesson.progress =
+        totalSections > 0
+          ? Number(
+              (
+                completedSections /
+                totalSections *
+                100
+              ).toFixed(2),
+            )
+          : 100;
+
+      userLesson.earnedXp += 25;
+      userLesson.earnedCoins += 10;
+
+      const wasLessonCompleted =
+        userLesson.isCompleted;
+
+      if (
+        completedSections >=
+        totalSections
+      ) {
+        userLesson.progress = 100;
+        userLesson.isCompleted = true;
+
+        if (!userLesson.completedAt) {
+          userLesson.completedAt =
+            new Date();
+        }
+      }
+
+      await manager.save(
+        userLesson,
+      );
+
+      // PROFILE
+      let profile =
+        await manager.findOne(
+          GrammarUserProfile,
+          {
+            where: {
+              userId,
+            },
+          },
+        );
+
+      if (!profile) {
+        profile =
+          manager.create(
+            GrammarUserProfile,
+            {
+              userId,
+              level: 1,
+
+              totalXp: 0,
+              totalCoins: 0,
+
+              completedCourses: 0,
+              completedLessons: 0,
+              completedSections: 0,
+              completedQuizzes: 0,
+
+              currentStreak: 0,
+              longestStreak: 0,
+
+              lastActivityAt:
+                new Date(),
+            },
+          );
+      }
+
+      profile.totalXp += 25;
+      profile.totalCoins += 10;
+      profile.completedSections += 1;
+      profile.completedQuizzes += 1;
+
+      if (
+        userLesson.isCompleted &&
+        !wasLessonCompleted
+      ) {
+        profile.completedLessons += 1;
+      }
+
+      profile.lastActivityAt =
+        new Date();
+
+      while (
+        profile.totalXp >=
+        profile.level * 100
+      ) {
+        profile.level++;
+      }
+
+      await manager.save(profile);
+
+      // NEXT SECTION
+      const nextSection =
+        await manager.findOne(
+          GrammarSection,
+          {
+            where: {
+              lessonId,
+              isActive: true,
+              orderNo:
+                section.orderNo + 1,
+            },
+          },
+        );
+
+      if (nextSection) {
+
+        let nextUserSection =
+          await manager.findOne(
+            GrammarUserSection,
+            {
+              where: {
+                userId,
+                lessonId,
+                sectionId:
+                  nextSection.id,
+              },
+            },
+          );
+
+        if (!nextUserSection) {
+          nextUserSection =
+            manager.create(
+              GrammarUserSection,
+              {
+                userId,
+                lessonId,
+                sectionId:
+                  nextSection.id,
+
+                isUnlocked: true,
+                isCompleted: false,
+
+                earnedXp: 0,
+                earnedCoins: 0,
+              },
+            );
+        } else {
+          nextUserSection.isUnlocked =
+            true;
+        }
+
+        await manager.save(
+          nextUserSection,
+        );
+      }
+
+      return {
+        success: true,
+        passed: true,
+
+        score: numericScore,
+
+        totalQuestions,
+        correctAnswers,
+
+        earnedXp: 25,
+        earnedCoins: 10,
+
+        sectionCompleted: true,
+        alreadyCompleted: false,
+
+        lessonProgress:
+          userLesson.progress,
+
+        lessonCompleted:
+          userLesson.isCompleted,
+
+        results,
+      };
+    },
+  );
+}
 
   // ============================================================
   // DASHBOARD
@@ -2077,4 +2111,195 @@ export class GrammarLearnerRepository {
       continueLesson,
     };
   }
+
+  async getAllQuizzes(userId: number) {
+
+  const sections =
+    await this.sectionRepo
+      .createQueryBuilder('section')
+      .innerJoinAndSelect(
+        'section.lesson',
+        'lesson',
+      )
+      .innerJoinAndSelect(
+        'lesson.course',
+        'course',
+      )
+      .where(
+        'section.isQuiz = :isQuiz',
+        {
+          isQuiz: true,
+        },
+      )
+      .andWhere(
+        'section.isActive = :isActive',
+        {
+          isActive: true,
+        },
+      )
+      .andWhere(
+        'lesson.isActive = :lessonActive',
+        {
+          lessonActive: true,
+        },
+      )
+      .andWhere(
+        'lesson.isPublished = :lessonPublished',
+        {
+          lessonPublished: true,
+        },
+      )
+      .andWhere(
+        'course.isActive = :courseActive',
+        {
+          courseActive: true,
+        },
+      )
+      .andWhere(
+        'course.isPublished = :coursePublished',
+        {
+          coursePublished: true,
+        },
+      )
+      .orderBy(
+        'course.sortOrder',
+        'ASC',
+      )
+      .addOrderBy(
+        'lesson.sortOrder',
+        'ASC',
+      )
+      .addOrderBy(
+        'section.orderNo',
+        'ASC',
+      )
+      .getMany();
+
+  return sections.map(section => ({
+
+    id: section.id,
+
+    lessonId:
+      section.lessonId,
+
+    lessonTitle:
+      section.lesson?.title,
+
+    courseId:
+      section.lesson?.courseId,
+
+    courseTitle:
+      section.lesson?.course?.title,
+
+    title:
+      section.heading,
+
+    totalQuestions:
+      section.quizData?.questions
+        ?.length ?? 0,
+
+    questions:
+      (
+        section.quizData?.questions ?? []
+      ).map(question => ({
+
+        question:
+          question.question,
+
+        options:
+          question.options.map(
+            option => ({
+              text: option.text,
+            }),
+          ),
+
+      })),
+
+  }));
+}
+async getRandomQuiz(
+  userId: number,
+  limit = 10,
+) {
+  const safeLimit = Math.min(
+    Math.max(Number(limit) || 10, 1),
+    50,
+  );
+
+  const sections = await this.sectionRepo
+    .createQueryBuilder('section')
+    .innerJoinAndSelect(
+      'section.lesson',
+      'lesson',
+    )
+    .innerJoinAndSelect(
+      'lesson.course',
+      'course',
+    )
+    .where(
+      'section.isQuiz = :isQuiz',
+      {
+        isQuiz: true,
+      },
+    )
+    .andWhere(
+      'section.isActive = :isActive',
+      {
+        isActive: true,
+      },
+    )
+    .andWhere(
+      'lesson.isActive = :lessonActive',
+      {
+        lessonActive: true,
+      },
+    )
+    .andWhere(
+      'lesson.isPublished = :lessonPublished',
+      {
+        lessonPublished: true,
+      },
+    )
+    .andWhere(
+      'course.isActive = :courseActive',
+      {
+        courseActive: true,
+      },
+    )
+    .andWhere(
+      'course.isPublished = :coursePublished',
+      {
+        coursePublished: true,
+      },
+    )
+    .orderBy('RANDOM()')
+    .limit(safeLimit)
+    .getMany();
+
+  return sections.map(section => ({
+    id: section.id,
+
+    lessonId: section.lessonId,
+    lessonTitle: section.lesson?.title ?? '',
+
+    courseId: section.lesson?.courseId ?? null,
+    courseTitle:
+      section.lesson?.course?.title ?? '',
+
+    title: section.heading,
+
+    totalQuestions:
+      section.quizData?.questions?.length ?? 0,
+
+    questions: (
+      section.quizData?.questions ?? []
+    ).map(question => ({
+      question: question.question,
+
+      options: question.options.map(option => ({
+        text: option.text,
+      })),
+    })),
+  }));
+}
 }

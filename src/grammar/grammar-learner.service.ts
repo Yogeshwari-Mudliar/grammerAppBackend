@@ -78,19 +78,19 @@ export class GrammarLearnerService {
   // QUIZ
   // ============================================================
 
-  submitQuiz(
-    userId: number,
-    lessonId: string,
-    sectionId: string,
-    score: number,
-  ) {
-    return this.repo.submitQuiz(
-      userId,
-      lessonId,
-      sectionId,
-      score,
-    );
-  }
+  // submitQuiz(
+  //   userId: number,
+  //   lessonId: string,
+  //   sectionId: string,
+  //   score: number,
+  // ) {
+  //   return this.repo.submitQuiz(
+  //     userId,
+  //     lessonId,
+  //     sectionId,
+  //     score,
+  //   );
+  // }
 
   // ============================================================
   // DASHBOARD
@@ -99,4 +99,36 @@ export class GrammarLearnerService {
   getDashboard(userId: number) {
     return this.repo.getDashboard(userId);
   }
+
+  async submitQuiz(
+  userId: number,
+  lessonId: string,
+  sectionId: string,
+  answers: number[],
+) {
+  return this.repo.submitQuiz(
+    userId,
+    lessonId,
+    sectionId,
+    answers,
+  );
+}
+// ============================================================
+// PRACTICE QUIZZES
+// ============================================================
+
+async getAllQuizzes(userId: number) {
+  return this.repo.getAllQuizzes(userId);
+}
+
+// ============================================================
+// RANDOM QUIZ / RAPID FIRE
+// ============================================================
+
+async getRandomQuiz(
+  userId: number,
+  limit = 10,
+) {
+  return this.repo.getRandomQuiz(userId, limit);
+}
 }

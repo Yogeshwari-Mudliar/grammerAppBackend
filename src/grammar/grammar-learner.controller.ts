@@ -4,6 +4,8 @@ import {
   Get,
   Param,
   Post,
+  Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 
@@ -11,6 +13,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 import { GrammarLearnerService } from './grammar-learner.service';
+import { SubmitGrammarQuizDto } from './dto/learner/submit-quiz.dto';
 
 @Controller('grammar/learn')
 @UseGuards(JwtAuthGuard)
@@ -103,19 +106,19 @@ export class GrammarLearnerController {
   @Post(
     'lesson/:lessonId/quiz/:sectionId/submit',
   )
-  submitQuiz(
-    @CurrentUser() user: any,
-    @Param('lessonId') lessonId: string,
-    @Param('sectionId') sectionId: string,
-    @Body('score') score: number,
-  ) {
-    return this.service.submitQuiz(
-      user.id,
-      lessonId,
-      sectionId,
-      score,
-    );
-  }
+  // submitQuiz(
+  //   @CurrentUser() user: any,
+  //   @Param('lessonId') lessonId: string,
+  //   @Param('sectionId') sectionId: string,
+  //   @Body('score') score: number,
+  // ) {
+  //   return this.service.submitQuiz(
+  //     user.id,
+  //     lessonId,
+  //     sectionId,
+  //     score,
+  //   );
+  // }
 
   // ============================================================
   // DASHBOARD
@@ -129,4 +132,41 @@ export class GrammarLearnerController {
       user.id,
     );
   }
+
+  @Post(
+  'lessons/:lessonId/sections/:sectionId/quiz',
+)
+submitQuiz(
+  @Param('lessonId') lessonId: string,
+  @Param('sectionId') sectionId: string,
+  @Body() dto: SubmitGrammarQuizDto,
+  @Req() req: any,
+) {
+  return this.service.submitQuiz(
+    req.user.id,
+    lessonId,
+    sectionId,
+    dto.answers,
+  );
+}
+
+@Get('quizzes')
+getAllQuizzes(
+  @Req() req: any,
+) {
+  return this.service.getAllQuizzes(
+    req.user.id,
+  );
+}
+
+@Get('quizzes/random')
+getRandomQuiz(
+  @Req() req: any,
+  @Query('limit') limit?: number,
+) {
+  return this.service.getRandomQuiz(
+    req.user.id,
+    Number(limit) || 10,
+  );
+}
 }

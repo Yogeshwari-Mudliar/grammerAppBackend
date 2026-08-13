@@ -76,4 +76,20 @@ export class GrammarSection {
 
   @Column()
   lessonId: string;
+
+  @Column({
+  type: 'jsonb',
+  nullable: true,
+  default: () => "'{\"questions\": []}'",
+})
+quizData: {
+  questions: {
+    question: string;
+    options: {
+      text: string;
+      isCorrect: boolean;
+    }[];
+    explanation?: string;
+  }[];
+};
 }
