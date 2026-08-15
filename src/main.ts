@@ -10,6 +10,7 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
 
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,41 +19,61 @@ async function bootstrap() {
     }),
   );
 
-const corsOrigins = config
-  .get<string>(
-    'CORS_ORIGIN',
-    'http://localhost:8100,http://localhost:4200',
-  )
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(Boolean);
 
-app.enableCors({
-  origin: (origin, callback) => {
+  // =====================================================
+  // CORS
+  // =====================================================
 
-    // Allow requests without Origin header
-    // such as Postman / server-to-server requests
-    if (!origin) {
-      return callback(null, true);
-    }
+  const allowedOrigins = [
+    'http://localhost:8100',
+    'https://grammer-app-frontend.vercel.app',
+  ];
 
-    if (corsOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+  app.enableCors({
+    origin: (origin, callback) => {
 
-    return callback(
-      new Error(`CORS blocked for origin: ${origin}`),
-      false,
-    );
-  },
+      /*
+       * Allow requests without origin
+       * such as Postman / server requests.
+       */
+      if (!origin) {
+        return callback(null, true);
+      }
 
-  credentials: true,
-});
 
-  await app.listen(config.get<number>('PORT', 3000));
+      /*
+       * Allow local Ionic app and
+       * deployed Vercel frontend.
+       */
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+
+      return callback(
+        new Error(`Not allowed by CORS: ${origin}`),
+        false,
+      );
+    },
+
+    credentials: true,
+  });
+
+
+  // =====================================================
+  // SERVER
+  // =====================================================
+
+  const port =
+    config.get<number>('PORT', 3000);
+
+  await app.listen(
+    port,
+    '0.0.0.0',
+  );
 
   console.log(
-    `🚀 Server running on http://localhost:${config.get<number>('PORT', 3000)}`,
+    `🚀 Server running on port ${port}`,
   );
 }
 
