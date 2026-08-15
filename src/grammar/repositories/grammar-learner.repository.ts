@@ -2302,4 +2302,127 @@ async getRandomQuiz(
     })),
   }));
 }
+// ============================================================
+// QUIZ — CHECK SINGLE ANSWER
+// ============================================================
+
+async checkQuizAnswer(
+  userId: number,
+  lessonId: string,
+  sectionId: string,
+  questionIndex: number,
+  answerIndex: number,
+) {
+
+  const lesson =
+    await this.lessonRepo.findOne({
+      where: {
+        id: lessonId,
+        isActive: true,
+        isPublished: true,
+      },
+    });
+
+  if (!lesson) {
+    throw new NotFoundException(
+      'Lesson not found',
+    );
+  }
+
+
+  const section =
+    await this.sectionRepo.findOne({
+      where: {
+        id: sectionId,
+        lessonId,
+        isActive: true,
+      },
+    });
+
+  if (!section) {
+    throw new NotFoundException(
+      'Quiz section not found',
+    );
+  }
+
+
+  if (!section.isQuiz) {
+    throw new NotFoundException(
+      'This section is not a quiz',
+    );
+  }
+
+
+  const questions =
+    section.quizData?.questions ?? [];
+
+
+  if (!questions.length) {
+    throw new NotFoundException(
+      'No quiz questions found',
+    );
+  }
+
+
+  if (
+    questionIndex < 0 ||
+    questionIndex >= questions.length
+  ) {
+    throw new NotFoundException(
+      'Invalid question index',
+    );
+  }
+
+
+  const question =
+    questions[questionIndex];
+
+
+  const options =
+    question.options ?? [];
+
+
+  if (
+    answerIndex < 0 ||
+    answerIndex >= options.length
+  ) {
+    throw new NotFoundException(
+      'Invalid answer index',
+    );
+  }
+
+
+  const correctIndex =
+    options.findIndex(
+      option => option.isCorrect,
+    );
+
+
+  const isCorrect =
+    answerIndex === correctIndex;
+
+
+  return {
+
+    success: true,
+
+    questionIndex,
+
+    selectedIndex: answerIndex,
+
+    selectedAnswer:
+      options[answerIndex]?.text ?? null,
+
+    correctIndex,
+
+    correctAnswer:
+      options[correctIndex]?.text ?? null,
+
+    isCorrect,
+
+    explanation:
+      question.explanation ?? '',
+
+  };
+}
 }

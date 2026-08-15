@@ -19,30 +19,48 @@ import { GrammarModule } from './grammar/grammar.module';
       isGlobal: true,
     }),
 
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
+    // TypeOrmModule.forRootAsync({
+    //   imports: [ConfigModule],
+    //   inject: [ConfigService],
 
-      useFactory: (config: ConfigService) => ({
-        type: 'postgres',
+    //   useFactory: (config: ConfigService) => ({
+    //     type: 'postgres',
 
-        host: config.get<string>('DB_HOST', 'localhost'),
+    //     host: config.get<string>('DB_HOST', 'localhost'),
 
-        port: config.get<number>('DB_PORT', 5432),
+    //     port: config.get<number>('DB_PORT', 5432),
 
-        username: config.get<string>('DB_USERNAME', 'postgres'),
+    //     username: config.get<string>('DB_USERNAME', 'postgres'),
 
-        password: config.get<string>('DB_PASSWORD', 'postgres123'),
+    //     password: config.get<string>('DB_PASSWORD', 'postgres123'),
 
-        database: config.get<string>('DB_NAME', 'learning-1'),
+    //     database: config.get<string>('DB_NAME', 'learning-1'),
 
-        autoLoadEntities: true,
+    //     autoLoadEntities: true,
 
-        synchronize:
-          config.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
-      }),
-    }),
+    //     synchronize:
+    //       config.get<string>('DB_SYNCHRONIZE', 'true') === 'true',
+    //   }),
+    // }),
+TypeOrmModule.forRootAsync({
+  imports: [ConfigModule],
+  inject: [ConfigService],
 
+  useFactory: (config: ConfigService) => ({
+    type: 'postgres',
+
+    url: config.get<string>('DATABASE_URL'),
+
+    autoLoadEntities: true,
+
+    synchronize:
+      config.get<string>('DB_SYNCHRONIZE', 'false') === 'true',
+
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  }),
+}),
     UsersModule,
 
     AuthModule,
