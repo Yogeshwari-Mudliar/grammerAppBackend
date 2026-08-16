@@ -30,6 +30,8 @@ const allowedOrigins = [
 
   // Capacitor Android
   'http://localhost',
+    // Capacitor Android
+  'https://localhost',
 
   // Capacitor / native compatibility
   'capacitor://localhost',
