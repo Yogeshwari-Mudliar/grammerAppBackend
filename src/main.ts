@@ -24,10 +24,19 @@ async function bootstrap() {
   // CORS
   // =====================================================
 
-  const allowedOrigins = [
-    'http://localhost:8100',
-    'https://grammer-app-frontend.vercel.app',
-  ];
+const allowedOrigins = [
+  // Ionic development
+  'http://localhost:8100',
+
+  // Capacitor Android
+  'http://localhost',
+
+  // Capacitor / native compatibility
+  'capacitor://localhost',
+
+  // Production web app
+  'https://grammer-app-frontend.vercel.app',
+];
 
   app.enableCors({
     origin: (origin, callback) => {
