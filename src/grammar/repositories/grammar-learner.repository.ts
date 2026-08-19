@@ -10,6 +10,7 @@ import {
 
 import {
   DataSource,
+  EntityManager,
   Repository,
 } from 'typeorm';
 
@@ -87,7 +88,84 @@ export class GrammarLearnerRepository {
 
     return profile;
   }
+// ============================================================
+// STREAK
+// ============================================================
 
+private async updateStreak(
+  manager: EntityManager,
+  profile: GrammarUserProfile,
+) {
+  const now = new Date();
+
+  const today = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+
+  const lastActivity = profile.lastActivityAt
+    ? new Date(profile.lastActivityAt)
+    : null;
+
+  if (!lastActivity) {
+    profile.currentStreak = 1;
+    profile.longestStreak = Math.max(
+      profile.longestStreak ?? 0,
+      1,
+    );
+  } else {
+    const lastDay = new Date(
+      lastActivity.getFullYear(),
+      lastActivity.getMonth(),
+      lastActivity.getDate(),
+    );
+
+    const diffMs =
+      today.getTime() -
+      lastDay.getTime();
+
+    const diffDays =
+      Math.floor(
+        diffMs /
+          (1000 * 60 * 60 * 24),
+      );
+
+    // Same day
+    if (diffDays === 0) {
+      // Do nothing.
+    }
+
+    // Yesterday
+    else if (diffDays === 1) {
+      profile.currentStreak =
+        (profile.currentStreak ?? 0) + 1;
+
+      profile.longestStreak =
+        Math.max(
+          profile.longestStreak ?? 0,
+          profile.currentStreak,
+        );
+    }
+
+    // More than one day gap
+    else {
+      profile.currentStreak = 1;
+
+      profile.longestStreak =
+        Math.max(
+          profile.longestStreak ?? 0,
+          1,
+        );
+    }
+  }
+
+  profile.lastActivityAt = now;
+
+  await manager.save(profile);
+
+  return profile;
+}
   // ============================================================
   // USER COURSE
   // ============================================================
@@ -886,18 +964,16 @@ return {
         // PROFILE REWARD
         // ------------------------------------------------
 
-        profile.totalXp +=
-          earnedXp;
+       profile.totalXp += earnedXp;
 
-        profile.totalCoins +=
-          earnedCoins;
+profile.totalCoins += earnedCoins;
 
-        profile.completedSections +=
-          1;
+profile.completedSections += 1;
 
-        profile.lastActivityAt =
-          new Date();
-
+await this.updateStreak(
+  manager,
+  profile,
+);
         if (
           userLesson.isCompleted &&
           !wasLessonCompleted
@@ -1866,8 +1942,10 @@ async submitQuiz(
         profile.completedLessons += 1;
       }
 
-      profile.lastActivityAt =
-        new Date();
+   await this.updateStreak(
+  manager,
+  profile,
+);
 
       while (
         profile.totalXp >=
@@ -1964,154 +2042,379 @@ async submitQuiz(
   // ============================================================
   // DASHBOARD
   // ============================================================
+// ============================================================
+// DASHBOARD
+// ============================================================
 
-  async getDashboard(
-    userId: number,
-  ) {
-    const profile =
-      await this.getProfile(
+async getDashboard(
+  userId: number,
+) {
+  const profile =
+    await this.getProfile(userId);
+
+  // ============================================================
+  // CURRENT COURSE
+  // ============================================================
+
+  const currentCourse =
+    await this.userCourseRepo.findOne({
+      where: {
         userId,
-      );
-
-    const currentCourse =
-      await this.userCourseRepo.findOne({
-        where: {
-          userId,
-          isStarted: true,
-          isCompleted: false,
-        },
-        order: {
-          updatedAt: 'DESC',
-        },
-      });
-
-    const baseResponse = {
-      profile: {
-        level: profile.level,
-        xp: profile.totalXp,
-        coins: profile.totalCoins,
-        streak: profile.currentStreak,
-        longestStreak:
-          profile.longestStreak,
+        isStarted: true,
+        isCompleted: false,
       },
-
-      stats: {
-        completedCourses:
-          profile.completedCourses,
-
-        completedLessons:
-          profile.completedLessons,
-
-        completedSections:
-          profile.completedSections,
-
-        completedQuizzes:
-          profile.completedQuizzes,
+      order: {
+        updatedAt: 'DESC',
       },
-    };
+    });
 
-    if (!currentCourse) {
-      return {
-        ...baseResponse,
-        currentCourse: null,
-        continueLesson: null,
-      };
-    }
+  // ============================================================
+  // XP
+  // ============================================================
 
-    const course =
-      await this.courseRepo.findOne({
-        where: {
-          id:
-            currentCourse.courseId,
-        },
-      });
+  const currentLevel =
+    Number(profile.level ?? 1);
 
-    const userLesson =
-      await this.userLessonRepo.findOne({
-        where: {
-          userId,
-          courseId:
-            currentCourse.courseId,
-          isCompleted: false,
-        },
-        order: {
-          updatedAt: 'ASC',
-        },
-      });
+  const currentXp =
+    Number(profile.totalXp ?? 0);
 
-    let continueLesson: any = null;
+  const xpForCurrentLevel =
+    (currentLevel - 1) * 100;
 
-    if (userLesson) {
-      const lesson =
-        await this.lessonRepo.findOne({
-          where: {
-            id: userLesson.lessonId,
-          },
-        });
+  const xpForNextLevel =
+    currentLevel * 100;
 
-      if (lesson) {
-        continueLesson = {
-          id: lesson.id,
-          title: lesson.title,
-          description:
-            lesson.shortDescription,
-          thumbnail:
-            lesson.thumbnail,
-          duration:
-            lesson.duration,
+  const xpProgress =
+    Math.min(
+      Math.max(
+        currentXp -
+          xpForCurrentLevel,
+        0,
+      ),
+      100,
+    );
 
-          progress:
-            userLesson.progress,
+  // ============================================================
+  // BASE RESPONSE
+  // ============================================================
 
-          completedSections:
-            userLesson.completedSections,
+  const baseResponse: {
+  profile: {
+    level: number;
+    xp: number;
+    coins: number;
+    currentStreak: number;
+    longestStreak: number;
+    xpForCurrentLevel: number;
+    xpForNextLevel: number;
+    xpProgress: number;
+  };
 
-          totalSections:
-            userLesson.totalSections,
+  stats: {
+    completedCourses: number;
+    completedLessons: number;
+    completedSections: number;
+    completedQuizzes: number;
+  };
 
-          earnedXp:
-            userLesson.earnedXp,
+  currentCourse: {
+    id: string;
+    title: string;
+    description: string;
+    bannerImage: string;
+    level: string;
+    progress: number;
+    completedLessons: number;
+    totalLessons: number;
+    earnedXp: number;
+    earnedCoins: number;
+  } | null;
 
-          earnedCoins:
-            userLesson.earnedCoins,
-        };
-      }
-    }
+  continueLesson: {
+    id: string;
+    title: string;
+    description: string;
+    thumbnail: string;
+    duration: number;
+    progress: number;
+    completedSections: number;
+    totalSections: number;
+    earnedXp: number;
+    earnedCoins: number;
+  } | null;
 
-    return {
-      ...baseResponse,
+  recentActivity: {
+    sectionId: string;
+    sectionTitle: string;
+    lessonId: string;
+    lessonTitle: string;
+    courseId: string | null;
+    courseTitle: string;
+    earnedXp: number;
+    earnedCoins: number;
+    completedAt: Date | null;
+  }[];
+} = {
+  profile: {
+    level: currentLevel,
 
-      currentCourse: course
-        ? {
-            id: course.id,
-            title: course.title,
-            description:
-              course.description,
-            bannerImage:
-              course.bannerImage,
-            level: course.level,
+    xp: currentXp,
 
-            progress:
-              currentCourse.progress,
+    coins:
+      Number(profile.totalCoins ?? 0),
 
-            completedLessons:
-              currentCourse.completedLessons,
+    currentStreak:
+      Number(profile.currentStreak ?? 0),
 
-            totalLessons:
-              currentCourse.totalLessons,
+    longestStreak:
+      Number(profile.longestStreak ?? 0),
+
+    xpForCurrentLevel,
+
+    xpForNextLevel,
+
+    xpProgress,
+  },
+
+  stats: {
+    completedCourses:
+      Number(profile.completedCourses ?? 0),
+
+    completedLessons:
+      Number(profile.completedLessons ?? 0),
+
+    completedSections:
+      Number(profile.completedSections ?? 0),
+
+    completedQuizzes:
+      Number(profile.completedQuizzes ?? 0),
+  },
+
+  currentCourse: null,
+
+  continueLesson: null,
+
+  recentActivity: [],
+};
+  // ============================================================
+  // RECENT ACTIVITY
+  // ============================================================
+
+  const recentSections =
+    await this.userSectionRepo.find({
+      where: {
+        userId,
+        isCompleted: true,
+      },
+      order: {
+        completedAt: 'DESC',
+      },
+      take: 5,
+    });
+
+  const recentActivity =
+    await Promise.all(
+      recentSections.map(
+        async item => {
+          const section =
+            await this.sectionRepo.findOne({
+              where: {
+                id: item.sectionId,
+              },
+              relations: [
+                'lesson',
+                'lesson.course',
+              ],
+            });
+
+          return {
+            sectionId:
+              item.sectionId,
+
+            sectionTitle:
+              section?.heading ?? '',
+
+            lessonId:
+              item.lessonId,
+
+            lessonTitle:
+              section?.lesson?.title ?? '',
+
+            courseId:
+              section?.lesson?.courseId ??
+              null,
+
+            courseTitle:
+              section?.lesson?.course
+                ?.title ?? '',
 
             earnedXp:
-              currentCourse.earnedXp,
+              Number(
+                item.earnedXp ?? 0,
+              ),
 
             earnedCoins:
-              currentCourse.earnedCoins,
-          }
-        : null,
+              Number(
+                item.earnedCoins ?? 0,
+              ),
 
-      continueLesson,
-    };
+            completedAt:
+              item.completedAt ?? null,
+          };
+        },
+      ),
+    );
+
+  baseResponse.recentActivity =
+    recentActivity;
+
+  // ============================================================
+  // NO CURRENT COURSE
+  // ============================================================
+
+  if (!currentCourse) {
+    return baseResponse;
   }
 
+  // ============================================================
+  // COURSE
+  // ============================================================
+
+  const course =
+    await this.courseRepo.findOne({
+      where: {
+        id: currentCourse.courseId,
+      },
+    });
+
+  // ============================================================
+  // CONTINUE LESSON
+  // ============================================================
+
+  const userLesson =
+    await this.userLessonRepo.findOne({
+      where: {
+        userId,
+        courseId:
+          currentCourse.courseId,
+        isCompleted: false,
+      },
+      order: {
+        updatedAt: 'ASC',
+      },
+    });
+
+  let continueLesson: any = null;
+
+  if (userLesson) {
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id: userLesson.lessonId,
+        },
+      });
+
+    if (lesson) {
+      continueLesson = {
+        id: lesson.id,
+
+        title:
+          lesson.title,
+
+        description:
+          lesson.shortDescription,
+
+        thumbnail:
+          lesson.thumbnail,
+
+        duration:
+          lesson.duration,
+
+        progress:
+          Number(
+            userLesson.progress ?? 0,
+          ),
+
+        completedSections:
+          Number(
+            userLesson.completedSections ??
+              0,
+          ),
+
+        totalSections:
+          Number(
+            userLesson.totalSections ??
+              0,
+          ),
+
+        earnedXp:
+          Number(
+            userLesson.earnedXp ?? 0,
+          ),
+
+        earnedCoins:
+          Number(
+            userLesson.earnedCoins ?? 0,
+          ),
+      };
+    }
+  }
+
+  // ============================================================
+  // CURRENT COURSE RESPONSE
+  // ============================================================
+
+  baseResponse.currentCourse =
+    course
+      ? {
+          id: course.id,
+
+          title:
+            course.title,
+
+          description:
+            course.description,
+
+          bannerImage:
+            course.bannerImage,
+
+          level:
+            course.level,
+
+          progress:
+            Number(
+              currentCourse.progress ?? 0,
+            ),
+
+          completedLessons:
+            Number(
+              currentCourse.completedLessons ??
+                0,
+            ),
+
+          totalLessons:
+            Number(
+              currentCourse.totalLessons ??
+                0,
+            ),
+
+          earnedXp:
+            Number(
+              currentCourse.earnedXp ?? 0,
+            ),
+
+          earnedCoins:
+            Number(
+              currentCourse.earnedCoins ?? 0,
+            ),
+        }
+      : null;
+
+  baseResponse.continueLesson =
+    continueLesson;
+
+  return baseResponse;
+}
   async getAllQuizzes(userId: number) {
 
   const sections =
