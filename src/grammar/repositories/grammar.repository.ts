@@ -24,8 +24,7 @@ import { User } from '../../users/users.entity';
 import { UserRole } from 'src/common/enums/user-role.enum';
 
 @Injectable()
-export class GrammarAdminRepository {
-
+export class GrammarRepository {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
