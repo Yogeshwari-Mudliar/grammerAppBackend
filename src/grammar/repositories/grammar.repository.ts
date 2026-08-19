@@ -1,10 +1,9 @@
 import {
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 
-import {
-  InjectRepository,
-} from '@nestjs/typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 
 import {
   Repository,
@@ -14,21 +13,20 @@ import { GrammarCourse } from '../entities/grammar-course.entity';
 import { GrammarLesson } from '../entities/grammar-lesson.entity';
 import { GrammarSection } from '../entities/grammar-section.entity';
 
-import { GrammarUserCourse } from '../entities/grammar-user-course.entity';
-import { GrammarUserLesson } from '../entities/grammar-user-lesson.entity';
-import { GrammarUserSection } from '../entities/grammar-user-section.entity';
-import { GrammarUserQuiz } from '../entities/grammar-user-quiz.entity';
-import { GrammarUserProfile } from '../entities/grammar-user-profile.entity';
+import { CreateCourseDto } from '../dto/create-course.dto';
+import { CreateLessonDto } from '../dto/create-lesson.dto';
+import { CreateSectionDto } from '../dto/create-section.dto';
 
-import { User } from '../../users/users.entity';
-import { UserRole } from 'src/common/enums/user-role.enum';
+import { UpdateCourseDto } from '../dto/update-course.dto';
+import { UpdateLessonDto } from '../dto/update-lesson.dto';
+import { UpdateSectionDto } from '../dto/update-section.dto';
+
+import { buildSections } from '../utils/section-parser';
 
 @Injectable()
 export class GrammarRepository {
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepo: Repository<User>,
 
+  constructor(
     @InjectRepository(GrammarCourse)
     private readonly courseRepo: Repository<GrammarCourse>,
 
@@ -37,581 +35,488 @@ export class GrammarRepository {
 
     @InjectRepository(GrammarSection)
     private readonly sectionRepo: Repository<GrammarSection>,
-
-    @InjectRepository(GrammarUserCourse)
-    private readonly userCourseRepo: Repository<GrammarUserCourse>,
-
-    @InjectRepository(GrammarUserLesson)
-    private readonly userLessonRepo: Repository<GrammarUserLesson>,
-
-    @InjectRepository(GrammarUserSection)
-    private readonly userSectionRepo: Repository<GrammarUserSection>,
-
-    @InjectRepository(GrammarUserQuiz)
-    private readonly userQuizRepo: Repository<GrammarUserQuiz>,
-
-    @InjectRepository(GrammarUserProfile)
-    private readonly profileRepo: Repository<GrammarUserProfile>,
   ) {}
 
-  // ============================================================
-  // ADMIN DASHBOARD
-  // ============================================================
+  // =====================================================
+  // COURSE
+  // =====================================================
 
-  async getDashboard() {
+  async getCourses() {
 
-    // ============================================================
-    // USERS
-    // ============================================================
+    const courses = await this.courseRepo.find({
+      where: {
+        isActive: true,
+      },
 
-    const totalUsers =
-      await this.userRepo.count();
+      relations: [
+        'lessons',
+        'lessons.sections',
+      ],
 
-    const totalStudents =
-      await this.userRepo.count({
-        where: {
-          role: UserRole.STUDENT,
-        },
-      });
-
-    const totalTeachers =
-      await this.userRepo.count({
-        where: {
-          role: UserRole.TEACHER,
-        },
-      });
-
-    // ============================================================
-    // COURSES
-    // ============================================================
-
-    const totalCourses =
-      await this.courseRepo.count({
-        where: {
-          isActive: true,
-        },
-      });
-
-    const publishedCourses =
-      await this.courseRepo.count({
-        where: {
-          isActive: true,
-          isPublished: true,
-        },
-      });
-
-    const draftCourses =
-      await this.courseRepo.count({
-        where: {
-          isActive: true,
-          isPublished: false,
-        },
-      });
-
-    // ============================================================
-    // LESSONS
-    // ============================================================
-
-    const totalLessons =
-      await this.lessonRepo.count({
-        where: {
-          isActive: true,
-        },
-      });
-
-    const publishedLessons =
-      await this.lessonRepo.count({
-        where: {
-          isActive: true,
-          isPublished: true,
-        },
-      });
-
-    // ============================================================
-    // SECTIONS
-    // ============================================================
-
-    const totalSections =
-      await this.sectionRepo.count({
-        where: {
-          isActive: true,
-        },
-      });
-
-    const totalQuizzes =
-      await this.sectionRepo.count({
-        where: {
-          isActive: true,
-          isQuiz: true,
-        },
-      });
-
-    const totalContentSections =
-      await this.sectionRepo.count({
-        where: {
-          isActive: true,
-          isQuiz: false,
-        },
-      });
-
-    // ============================================================
-    // LEARNING STATISTICS
-    // ============================================================
-
-    const totalEnrollments =
-      await this.userCourseRepo.count();
-
-    const completedCourses =
-      await this.userCourseRepo.count({
-        where: {
-          isCompleted: true,
-        },
-      });
-
-    const startedCourses =
-      await this.userCourseRepo.count({
-        where: {
-          isStarted: true,
-        },
-      });
-
-    const completedLessons =
-      await this.userLessonRepo.count({
-        where: {
-          isCompleted: true,
-        },
-      });
-
-    const completedSections =
-      await this.userSectionRepo.count({
-        where: {
-          isCompleted: true,
-        },
-      });
-
-    const totalQuizAttempts =
-      await this.userQuizRepo.count();
-
-    const passedQuizAttempts =
-      await this.userQuizRepo.count({
-        where: {
-          isPassed: true,
-        },
-      });
-
-    // ============================================================
-    // XP / COINS
-    // ============================================================
-
-    const profiles =
-      await this.profileRepo.find();
-
-    const totalXpEarned =
-      profiles.reduce(
-        (sum, profile) =>
-          sum +
-          Number(profile.totalXp ?? 0),
-        0,
-      );
-
-    const totalCoinsEarned =
-      profiles.reduce(
-        (sum, profile) =>
-          sum +
-          Number(profile.totalCoins ?? 0),
-        0,
-      );
-
-    // ============================================================
-    // ACTIVE LEARNERS
-    //
-    // Learners who have activity in the last 7 days.
-    // ============================================================
-
-    const sevenDaysAgo =
-      new Date();
-
-    sevenDaysAgo.setDate(
-      sevenDaysAgo.getDate() - 7,
-    );
-
-    const activeLearners =
-      profiles.filter(profile => {
-
-        if (!profile.lastActivityAt) {
-          return false;
-        }
-
-        return (
-          new Date(
-            profile.lastActivityAt,
-          ) >= sevenDaysAgo
-        );
-      }).length;
-
-    // ============================================================
-    // AVERAGE QUIZ SCORE
-    // ============================================================
-
-    const quizAttempts =
-      await this.userQuizRepo.find();
-
-    const averageQuizScore =
-      quizAttempts.length > 0
-        ? Number(
-            (
-              quizAttempts.reduce(
-                (sum, quiz) =>
-                  sum +
-                  Number(
-                    quiz.score ?? 0,
-                  ),
-                0,
-              ) /
-              quizAttempts.length
-            ).toFixed(2),
-          )
-        : 0;
-
-    // ============================================================
-    // COURSE PERFORMANCE
-    // ============================================================
-
-    const courses =
-      await this.courseRepo.find({
-        where: {
-          isActive: true,
-        },
-        order: {
+      order: {
+        sortOrder: 'ASC',
+        lessons: {
           sortOrder: 'ASC',
+          sections: {
+            orderNo: 'ASC',
+          },
         },
+      },
+    });
+
+    courses.forEach(course => {
+
+      course.lessons = (course.lessons || [])
+        .filter(lesson => lesson.isActive);
+
+      course.lessons.forEach(lesson => {
+
+        lesson.sections = (lesson.sections || [])
+          .filter(section => section.isActive)
+          .sort(
+            (a, b) =>
+              (a.orderNo ?? 0) -
+              (b.orderNo ?? 0),
+          );
+
       });
 
-    const courseProgress =
-      await Promise.all(
-        courses.map(
-          async course => {
-
-            const userCourses =
-              await this.userCourseRepo.find({
-                where: {
-                  courseId: course.id,
-                },
-              });
-
-            const enrollments =
-              userCourses.length;
-
-            const completed =
-              userCourses.filter(
-                item =>
-                  item.isCompleted,
-              ).length;
-
-            const progress =
-              enrollments > 0
-                ? Number(
-                    (
-                      userCourses.reduce(
-                        (sum, item) =>
-                          sum +
-                          Number(
-                            item.progress ??
-                              0,
-                          ),
-                        0,
-                      ) /
-                      enrollments
-                    ).toFixed(2),
-                  )
-                : 0;
-
-            const xp =
-              userCourses.reduce(
-                (sum, item) =>
-                  sum +
-                  Number(
-                    item.earnedXp ?? 0,
-                  ),
-                0,
-              );
-
-            const coins =
-              userCourses.reduce(
-                (sum, item) =>
-                  sum +
-                  Number(
-                    item.earnedCoins ??
-                      0,
-                  ),
-                0,
-              );
-
-            return {
-              id: course.id,
-
-              title:
-                course.title,
-
-              description:
-                course.description,
-
-              bannerImage:
-                course.bannerImage,
-
-              level:
-                course.level,
-
-              isPublished:
-                course.isPublished,
-
-              enrollments,
-
-              completed,
-
-              completionRate:
-                enrollments > 0
-                  ? Number(
-                      (
-                        completed /
-                        enrollments *
-                        100
-                      ).toFixed(2),
-                    )
-                  : 0,
-
-              averageProgress:
-                progress,
-
-              earnedXp:
-                xp,
-
-              earnedCoins:
-                coins,
-            };
-          },
-        ),
+      course.lessons.sort(
+        (a, b) =>
+          (a.sortOrder ?? 0) -
+          (b.sortOrder ?? 0),
       );
 
-    // ============================================================
-    // TOP COURSES
-    // ============================================================
+    });
 
-    const topCourses =
-      [...courseProgress]
+    return courses;
+  }
+
+  async getCourse(id: string) {
+
+    const course = await this.courseRepo.findOne({
+      where: {
+        id,
+        isActive: true,
+      },
+
+      relations: [
+        'lessons',
+        'lessons.sections',
+      ],
+
+      order: {
+        lessons: {
+          sortOrder: 'ASC',
+          sections: {
+            orderNo: 'ASC',
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      throw new NotFoundException('Course not found');
+    }
+
+    // Remove inactive lessons
+    course.lessons = (course.lessons || [])
+      .filter(lesson => lesson.isActive);
+
+    // Remove inactive sections
+    course.lessons.forEach(lesson => {
+
+      lesson.sections = (lesson.sections || [])
+        .filter(section => section.isActive)
         .sort(
           (a, b) =>
-            b.enrollments -
-            a.enrollments,
-        )
-        .slice(0, 5);
+            (a.orderNo ?? 0) -
+            (b.orderNo ?? 0),
+        );
 
-    // ============================================================
-    // RECENT COURSES
-    // ============================================================
+    });
 
-    const recentCourses =
-      await this.courseRepo.find({
-        where: {
-          isActive: true,
-        },
-        order: {
-          createdAt: 'DESC',
-        },
-        take: 5,
-      });
+    // Make lesson order explicit
+    course.lessons.sort(
+      (a, b) =>
+        (a.sortOrder ?? 0) -
+        (b.sortOrder ?? 0),
+    );
 
-    // ============================================================
-    // RECENT ACTIVITY
-    // ============================================================
+    return course;
+  }
 
-    const recentSections =
-      await this.userSectionRepo.find({
-        where: {
-          isCompleted: true,
-        },
-        order: {
-          completedAt: 'DESC',
-        },
-        take: 10,
-      });
+async createCourse(dto: CreateCourseDto) {
+  const course = this.courseRepo.create({
+    ...dto,
 
-    const recentActivity =
-      await Promise.all(
-        recentSections.map(
-          async item => {
+    access:
+      (dto.accessTo ?? 'student') as
+        'student' | 'teacher' | 'both',
 
-            const section =
-              await this.sectionRepo.findOne({
-                where: {
-                  id: item.sectionId,
-                },
-                relations: [
-                  'lesson',
-                  'lesson.course',
-                ],
-              });
+    isActive: true,
+    isPublished: dto.isPublished ?? true,
+    sortOrder: dto.sortOrder ?? 1,
+  });
 
-            const user =
-              await this.userRepo.findOne({
-                where: {
-                  id: item.userId,
-                },
-              });
+  return this.courseRepo.save(course);
+}
+async updateCourse(
+  id: string,
+  dto: UpdateCourseDto,
+) {
+  await this.getCourse(id);
 
-            return {
-              userId:
-                item.userId,
-userName:
-  user
-    ? `${user.firstName} ${user.lastName ?? ''}`.trim()
-    : 'User',
+  await this.courseRepo.update(id, {
+    ...dto,
+    ...(dto.accessTo
+      ? { access: dto.accessTo as 'student' | 'teacher' | 'both' }
+      : {}),
+  });
 
-              sectionId:
-                item.sectionId,
+  return this.getCourse(id);
+}
+  async deleteCourse(id: string) {
 
-              sectionTitle:
-                section?.heading ??
-                '',
+    await this.getCourse(id);
 
-              lessonId:
-                item.lessonId,
-
-              lessonTitle:
-                section?.lesson?.title ??
-                '',
-
-              courseId:
-                section?.lesson?.courseId ??
-                null,
-
-              courseTitle:
-                section?.lesson?.course
-                  ?.title ??
-                '',
-
-              earnedXp:
-                Number(
-                  item.earnedXp ?? 0,
-                ),
-
-              earnedCoins:
-                Number(
-                  item.earnedCoins ?? 0,
-                ),
-
-              completedAt:
-                item.completedAt ??
-                null,
-            };
-          },
-        ),
-      );
-
-    // ============================================================
-    // RETURN DASHBOARD
-    // ============================================================
+    await this.courseRepo.update(
+      id,
+      {
+        isActive: false,
+      },
+    );
 
     return {
+      message: 'Course deleted',
+    };
+  }
 
-      overview: {
+  // =====================================================
+  // LESSON
+  // =====================================================
 
-        totalUsers,
+async addLesson(
+  courseId: string,
+  dto: CreateLessonDto,
+  text: string,
+) {
+  const course = await this.getCourse(courseId);
 
-        totalStudents,
+  if (!text) {
+    throw new NotFoundException(
+      'Lesson document/text not found',
+    );
+  }
 
-        totalTeachers,
+  const lesson = this.lessonRepo.create({
+    title: dto.title,
+    shortDescription: dto.shortDescription,
+    duration: dto.duration ?? 0,
+    thumbnail: dto.thumbnail ?? '',
+    isPublished: dto.isPublished ?? true,
+    isActive: true,
+    sortOrder: dto.sortOrder ?? 1,
+    course,
+    courseId,
+  });
 
-        totalCourses,
+  await this.lessonRepo.save(lesson);
 
-        publishedCourses,
+  // =====================================================
+  // PARSE DOCUMENT
+  // =====================================================
 
-        draftCourses,
+  const sections = buildSections(text);
 
-        totalLessons,
+  // =====================================================
+  // CREATE SECTIONS
+  // =====================================================
 
-        publishedLessons,
+  for (const section of sections) {
+    const sectionData: any = {
+      heading: section.heading,
+      content: section.content ?? '',
 
-        totalSections,
+      isQuiz: section.isQuiz ?? false,
 
-        totalContentSections,
+      sectionType:
+        section.sectionType ??
+        (section.isQuiz ? 'QUIZ' : 'TEXT'),
 
-        totalQuizzes,
+      type: 'TEXT',
 
-      },
+      imageUrl: '',
 
-      learning: {
+      orderNo: section.orderNo,
 
-        totalEnrollments,
+      xpReward: section.isQuiz ? 25 : 10,
 
-        startedCourses,
+      coinReward: section.isQuiz ? 15 : 5,
 
-        completedCourses,
+      lesson,
+      lessonId: lesson.id,
 
-        completedLessons,
+      isActive: true,
+    };
 
-        completedSections,
+    // IMPORTANT:
+    // quizData sirf quiz section ke liye set karo.
+    // Non-quiz ke liye null mat bhejo.
+    if (
+      section.isQuiz &&
+      section.quizData &&
+      Array.isArray(section.quizData.questions)
+    ) {
+      sectionData.quizData = {
+        questions: section.quizData.questions.map(
+          (question: any) => ({
+            question: question.question,
 
-        totalQuizAttempts,
+            options: (
+              question.options ?? []
+            ).map((option: any) => ({
+              text: option.text,
+              isCorrect:
+                option.isCorrect ?? false,
+            })),
 
-        passedQuizAttempts,
-
-        quizPassRate:
-          totalQuizAttempts > 0
-            ? Number(
-                (
-                  passedQuizAttempts /
-                  totalQuizAttempts *
-                  100
-                ).toFixed(2),
-              )
-            : 0,
-
-        averageQuizScore,
-
-      },
-
-      engagement: {
-
-        activeLearners,
-
-        totalXpEarned,
-
-        totalCoinsEarned,
-
-      },
-
-      topCourses,
-
-      courseProgress,
-
-      recentCourses:
-        recentCourses.map(
-          course => ({
-            id: course.id,
-
-            title:
-              course.title,
-
-            description:
-              course.description,
-
-            bannerImage:
-              course.bannerImage,
-
-            level:
-              course.level,
-
-            isPublished:
-              course.isPublished,
-
-            createdAt:
-              course.createdAt,
+            ...(question.explanation
+              ? {
+                  explanation:
+                    question.explanation,
+                }
+              : {}),
           }),
         ),
+      };
+    }
 
-      recentActivity,
+    const newSection =
+      this.sectionRepo.create(sectionData);
 
+    await this.sectionRepo.save(newSection);
+  }
+
+  return this.getLesson(lesson.id);
+}
+  async updateLesson(
+    id: string,
+    dto: UpdateLessonDto,
+    text?: string,
+  ) {
+
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!lesson) {
+      throw new NotFoundException(
+        'Lesson not found',
+      );
+    }
+
+    await this.lessonRepo.update(
+      id,
+      dto,
+    );
+
+    return this.getLesson(id);
+  }
+
+  async deleteLesson(id: string) {
+
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!lesson) {
+      throw new NotFoundException(
+        'Lesson not found',
+      );
+    }
+
+    await this.lessonRepo.update(
+      id,
+      {
+        isActive: false,
+      },
+    );
+
+    return {
+      message: 'Lesson deleted',
     };
+  }
+
+  async getLesson(id: string) {
+
+    const lesson =
+      await this.lessonRepo.findOne({
+
+        where: {
+          id,
+          isActive: true,
+        },
+
+        relations: [
+          'sections',
+        ],
+
+        order: {
+          sections: {
+            orderNo: 'ASC',
+          },
+        },
+      });
+
+    if (!lesson) {
+      throw new NotFoundException(
+        'Lesson not found',
+      );
+    }
+
+    // Remove inactive sections
+    lesson.sections =
+      (lesson.sections || [])
+        .filter(
+          section =>
+            section.isActive,
+        )
+        .sort(
+          (a, b) =>
+            (a.orderNo ?? 0) -
+            (b.orderNo ?? 0),
+        );
+
+    return lesson;
+  }
+
+  // =====================================================
+  // SECTION
+  // =====================================================
+
+  async addSection(
+    courseId: string,
+    lessonId: string,
+    dto: CreateSectionDto,
+  ) {
+
+    await this.getCourse(
+      courseId,
+    );
+
+    const lesson =
+      await this.lessonRepo.findOne({
+        where: {
+          id: lessonId,
+          isActive: true,
+        },
+      });
+
+    if (!lesson) {
+      throw new NotFoundException(
+        'Lesson not found',
+      );
+    }
+
+    const section =
+      this.sectionRepo.create({
+
+        ...dto,
+
+        lesson,
+
+        lessonId,
+
+        orderNo:
+          dto.orderNo ?? 1,
+
+        isActive: true,
+      });
+
+    return this.sectionRepo.save(
+      section,
+    );
+  }
+
+  async updateSection(
+    id: string,
+    dto: UpdateSectionDto,
+  ) {
+
+    const section =
+      await this.sectionRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!section) {
+      throw new NotFoundException(
+        'Section not found',
+      );
+    }
+
+    await this.sectionRepo.update(
+      id,
+      dto,
+    );
+
+    return this.sectionRepo.findOne({
+      where: {
+        id,
+      },
+    });
+  }
+
+  async deleteSection(id: string) {
+
+    const section =
+      await this.sectionRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!section) {
+      throw new NotFoundException(
+        'Section not found',
+      );
+    }
+
+    await this.sectionRepo.update(
+      id,
+      {
+        isActive: false,
+      },
+    );
+
+    return {
+      message: 'Section deleted',
+    };
+  }
+
+  async getSection(id: string) {
+
+    const section =
+      await this.sectionRepo.findOne({
+        where: {
+          id,
+        },
+      });
+
+    if (!section) {
+      throw new NotFoundException(
+        'Section not found',
+      );
+    }
+
+    return section;
   }
 }
